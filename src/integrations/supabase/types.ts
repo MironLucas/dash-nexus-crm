@@ -99,7 +99,22 @@ export type Database = {
           variante1?: string | null
           variante2?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_itens_orders"
+            columns: ["id_order"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id_order"]
+          },
+          {
+            foreignKeyName: "fk_itens_products"
+            columns: ["id_product"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id_product"]
+          },
+        ]
       }
       orders: {
         Row: {
@@ -113,7 +128,7 @@ export type Database = {
           valor_desconto: number | null
           valor_final: number | null
           valor_total: number | null
-          vendedor: string | null
+          vendedor: number | null
         }
         Insert: {
           canal_venda?: string | null
@@ -126,7 +141,7 @@ export type Database = {
           valor_desconto?: number | null
           valor_final?: number | null
           valor_total?: number | null
-          vendedor?: string | null
+          vendedor?: number | null
         }
         Update: {
           canal_venda?: string | null
@@ -139,9 +154,17 @@ export type Database = {
           valor_desconto?: number | null
           valor_final?: number | null
           valor_total?: number | null
-          vendedor?: string | null
+          vendedor?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_orders_customers"
+            columns: ["id_client"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id_client"]
+          },
+        ]
       }
       products: {
         Row: {
@@ -185,6 +208,21 @@ export type Database = {
           titulo?: string | null
           variante1?: string | null
           variante2?: string | null
+        }
+        Relationships: []
+      }
+      vendedores: {
+        Row: {
+          nomevendedor: string | null
+          vendedor: number | null
+        }
+        Insert: {
+          nomevendedor?: string | null
+          vendedor?: number | null
+        }
+        Update: {
+          nomevendedor?: string | null
+          vendedor?: number | null
         }
         Relationships: []
       }
