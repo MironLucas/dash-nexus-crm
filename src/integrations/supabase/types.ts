@@ -14,7 +14,180 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      customers: {
+        Row: {
+          aniversario: string | null
+          bairro: string | null
+          cep: string | null
+          cidade: string | null
+          complemento: string | null
+          created_at: string | null
+          document: string | null
+          email: string | null
+          estado: string | null
+          genero: string | null
+          id_client: number
+          logadouro: string | null
+          nome_completo: string | null
+          numero: string | null
+          telefone: string | null
+        }
+        Insert: {
+          aniversario?: string | null
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          complemento?: string | null
+          created_at?: string | null
+          document?: string | null
+          email?: string | null
+          estado?: string | null
+          genero?: string | null
+          id_client: number
+          logadouro?: string | null
+          nome_completo?: string | null
+          numero?: string | null
+          telefone?: string | null
+        }
+        Update: {
+          aniversario?: string | null
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          complemento?: string | null
+          created_at?: string | null
+          document?: string | null
+          email?: string | null
+          estado?: string | null
+          genero?: string | null
+          id_client?: number
+          logadouro?: string | null
+          nome_completo?: string | null
+          numero?: string | null
+          telefone?: string | null
+        }
+        Relationships: []
+      }
+      itens: {
+        Row: {
+          id_itens: number
+          id_order: number | null
+          id_product: number | null
+          product_desc: number | null
+          product_final: number | null
+          product_total: number | null
+          variante1: string | null
+          variante2: string | null
+        }
+        Insert: {
+          id_itens: number
+          id_order?: number | null
+          id_product?: number | null
+          product_desc?: number | null
+          product_final?: number | null
+          product_total?: number | null
+          variante1?: string | null
+          variante2?: string | null
+        }
+        Update: {
+          id_itens?: number
+          id_order?: number | null
+          id_product?: number | null
+          product_desc?: number | null
+          product_final?: number | null
+          product_total?: number | null
+          variante1?: string | null
+          variante2?: string | null
+        }
+        Relationships: []
+      }
+      orders: {
+        Row: {
+          canal_venda: string | null
+          data_pedido: string | null
+          id_client: number | null
+          id_order: number
+          status: string | null
+          taxa_entrega: number | null
+          transportadora: string | null
+          valor_desconto: number | null
+          valor_final: number | null
+          valor_total: number | null
+          vendedor: string | null
+        }
+        Insert: {
+          canal_venda?: string | null
+          data_pedido?: string | null
+          id_client?: number | null
+          id_order: number
+          status?: string | null
+          taxa_entrega?: number | null
+          transportadora?: string | null
+          valor_desconto?: number | null
+          valor_final?: number | null
+          valor_total?: number | null
+          vendedor?: string | null
+        }
+        Update: {
+          canal_venda?: string | null
+          data_pedido?: string | null
+          id_client?: number | null
+          id_order?: number
+          status?: string | null
+          taxa_entrega?: number | null
+          transportadora?: string | null
+          valor_desconto?: number | null
+          valor_final?: number | null
+          valor_total?: number | null
+          vendedor?: string | null
+        }
+        Relationships: []
+      }
+      products: {
+        Row: {
+          ativo: string | null
+          categoria: string | null
+          descricao: string | null
+          estoque: string | null
+          id_product: number
+          imagem: string | null
+          preco: number | null
+          sku: string | null
+          tags: string | null
+          titulo: string | null
+          variante1: string | null
+          variante2: string | null
+        }
+        Insert: {
+          ativo?: string | null
+          categoria?: string | null
+          descricao?: string | null
+          estoque?: string | null
+          id_product: number
+          imagem?: string | null
+          preco?: number | null
+          sku?: string | null
+          tags?: string | null
+          titulo?: string | null
+          variante1?: string | null
+          variante2?: string | null
+        }
+        Update: {
+          ativo?: string | null
+          categoria?: string | null
+          descricao?: string | null
+          estoque?: string | null
+          id_product?: number
+          imagem?: string | null
+          preco?: number | null
+          sku?: string | null
+          tags?: string | null
+          titulo?: string | null
+          variante1?: string | null
+          variante2?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

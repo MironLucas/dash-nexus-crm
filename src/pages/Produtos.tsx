@@ -11,7 +11,7 @@ const Produtos = () => {
     queryKey: ['products'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('products')
+        .from('products' as any)
         .select('*')
         .order('id_product', { ascending: false });
       if (error) throw error;

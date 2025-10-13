@@ -10,7 +10,7 @@ const Clientes = () => {
     queryKey: ['customers'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('customers')
+        .from('customers' as any)
         .select('*')
         .order('id_client', { ascending: false });
       if (error) throw error;

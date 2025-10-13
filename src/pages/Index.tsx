@@ -1,6 +1,10 @@
 import { DashboardCard } from "@/components/DashboardCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DollarSign, ShoppingCart, Users, TrendingUp } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import {
   AreaChart,
   Area,
@@ -17,23 +21,6 @@ import {
   Legend,
 } from "recharts";
 
-const salesData = [
-  { name: "Jan", vendas: 4000 },
-  { name: "Fev", vendas: 3000 },
-  { name: "Mar", vendas: 5000 },
-  { name: "Abr", vendas: 4500 },
-  { name: "Mai", vendas: 6000 },
-  { name: "Jun", vendas: 5500 },
-];
-
-const categoryData = [
-  { name: "Eletrônicos", value: 35 },
-  { name: "Roupas", value: 25 },
-  { name: "Alimentos", value: 20 },
-  { name: "Livros", value: 12 },
-  { name: "Outros", value: 8 },
-];
-
 const COLORS = [
   "hsl(var(--chart-1))",
   "hsl(var(--chart-2))",
@@ -43,6 +30,73 @@ const COLORS = [
 ];
 
 const Index = () => {
+  // Buscar dados de pedidos
+  const { data: orders } = useQuery({
+    queryKey: ['orders'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('orders' as any).select('*');
+      if (error) throw error;
+      return data as any[];
+    }
+  });
+
+  // Buscar dados de clientes
+  const { data: customers } = useQuery({
+    queryKey: ['customers'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('customers' as any).select('*');
+      if (error) throw error;
+      return data as any[];
+    }
+  });
+
+  // Buscar dados de produtos
+  const { data: products } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('products' as any).select('*');
+      if (error) throw error;
+      return data as any[];
+    }
+  });
+
+  // Calcular métricas
+  const totalRevenue = orders?.reduce((sum, order) => sum + (Number(order.valor_final) || 0), 0) || 0;
+  const totalOrders = orders?.length || 0;
+  const totalCustomers = customers?.length || 0;
+  const totalProducts = products?.length || 0;
+
+  // Dados de vendas por período (últimos 6 meses)
+  const salesData = Array.from({ length: 6 }, (_, i) => {
+    const date = subMonths(new Date(), 5 - i);
+    const monthStart = startOfMonth(date);
+    const monthEnd = endOfMonth(date);
+    
+    const monthOrders = orders?.filter(order => {
+      const orderDate = new Date(order.data_pedido);
+      return orderDate >= monthStart && orderDate <= monthEnd;
+    }) || [];
+    
+    const monthSales = monthOrders.reduce((sum, order) => sum + (Number(order.valor_final) || 0), 0);
+    
+    return {
+      name: format(date, 'MMM', { locale: ptBR }),
+      vendas: monthSales
+    };
+  });
+
+  // Dados de vendas por categoria
+  const categoryData = products?.reduce((acc, product) => {
+    const category = product.categoria || 'Outros';
+    const existing = acc.find(item => item.name === category);
+    if (existing) {
+      existing.value += 1;
+    } else {
+      acc.push({ name: category, value: 1 });
+    }
+    return acc;
+  }, [] as { name: string; value: number }[]) || [];
+
   return (
     <div className="space-y-6">
       <div>
@@ -53,27 +107,23 @@ const Index = () => {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <DashboardCard
           title="Receita Total"
-          value="R$ 45.231,89"
+          value={`R$ ${totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           icon={DollarSign}
-          trend={{ value: "20.1%", isPositive: true }}
         />
         <DashboardCard
           title="Vendas"
-          value="2.350"
+          value={totalOrders.toString()}
           icon={ShoppingCart}
-          trend={{ value: "12.5%", isPositive: true }}
         />
         <DashboardCard
           title="Clientes"
-          value="1.234"
+          value={totalCustomers.toString()}
           icon={Users}
-          trend={{ value: "8.3%", isPositive: true }}
         />
         <DashboardCard
-          title="Taxa de Crescimento"
-          value="18.2%"
+          title="Produtos"
+          value={totalProducts.toString()}
           icon={TrendingUp}
-          trend={{ value: "3.1%", isPositive: true }}
         />
       </div>
 
@@ -115,7 +165,7 @@ const Index = () => {
 
         <Card>
           <CardHeader>
-            <CardTitle>Vendas por Categoria</CardTitle>
+            <CardTitle>Produtos por Categoria</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
