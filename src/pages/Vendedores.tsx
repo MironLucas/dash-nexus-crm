@@ -1,10 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { DollarSign, ShoppingCart, TrendingUp } from "lucide-react";
+import { DollarSign, ShoppingCart, TrendingUp, Search } from "lucide-react";
+import { useState, useMemo } from "react";
 
 const Vendedores = () => {
+  const [searchTerm, setSearchTerm] = useState("");
+  
   const { data: vendedores, isLoading } = useQuery({
     queryKey: ['vendedores'],
     queryFn: async () => {
@@ -41,6 +45,15 @@ const Vendedores = () => {
       return salesMap;
     }
   });
+
+  const filteredVendedores = useMemo(() => {
+    if (!vendedores) return [];
+    
+    return vendedores.filter(vendedor => {
+      return vendedor.nomevendedor?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+             vendedor.vendedor?.toString().includes(searchTerm);
+    });
+  }, [vendedores, searchTerm]);
 
   const totalVendas = salesByVendedor 
     ? (Object.values(salesByVendedor).reduce((sum: number, v: any) => sum + v.valorTotal, 0) as number)
@@ -98,12 +111,27 @@ const Vendedores = () => {
       <Card>
         <CardHeader>
           <CardTitle>Performance por Vendedor</CardTitle>
+          <div className="flex gap-4 mt-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nome ou ID..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <p className="text-muted-foreground">Carregando vendedores...</p>
-          ) : vendedores && vendedores.length > 0 ? (
-            <Table>
+          ) : filteredVendedores && filteredVendedores.length > 0 ? (
+            <div>
+              <p className="text-sm text-muted-foreground mb-4">
+                Mostrando {filteredVendedores.length} de {vendedores?.length || 0} vendedores
+              </p>
+              <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>ID</TableHead>
@@ -114,7 +142,7 @@ const Vendedores = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {vendedores.map((vendedor: any) => {
+                {filteredVendedores.map((vendedor: any) => {
                   const stats = salesByVendedor?.[vendedor.vendedor] || {
                     quantidadePedidos: 0,
                     valorTotal: 0
@@ -139,6 +167,7 @@ const Vendedores = () => {
                 })}
               </TableBody>
             </Table>
+            </div>
           ) : (
             <p className="text-muted-foreground">Nenhum vendedor encontrado.</p>
           )}

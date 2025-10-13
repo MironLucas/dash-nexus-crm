@@ -3,13 +3,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Package, TrendingUp, ShoppingCart } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Package, TrendingUp, ShoppingCart, DollarSign, Search } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 const Produtos = () => {
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("todos");
+  const [categoryFilter, setCategoryFilter] = useState("todas");
   
   const { data: products, isLoading } = useQuery({
     queryKey: ['products'],
@@ -37,6 +42,38 @@ const Produtos = () => {
   const produtosAtivos = products?.filter(p => p.ativo?.toLowerCase() === 'ativo').length || 0;
   const estoqueTotal = products?.reduce((sum, p) => sum + Number(p.estoque || 0), 0) || 0;
   const produtosVendidos = soldItems?.length || 0;
+  const valorTotalEstoque = products?.reduce((sum, p) => {
+    const estoque = Number(p.estoque || 0);
+    const preco = Number(p.preco || 0);
+    return sum + (estoque * preco);
+  }, 0) || 0;
+
+  const categories = useMemo(() => {
+    const cats = new Set(products?.map(p => p.categoria).filter(Boolean));
+    return Array.from(cats);
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    if (!products) return [];
+    
+    return products.filter(product => {
+      const matchesSearch = 
+        product.titulo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.categoria?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesStatus = 
+        statusFilter === "todos" || 
+        (statusFilter === "ativo" && product.ativo?.toLowerCase() === 'ativo') ||
+        (statusFilter === "inativo" && product.ativo?.toLowerCase() !== 'ativo');
+      
+      const matchesCategory = 
+        categoryFilter === "todas" || 
+        product.categoria === categoryFilter;
+      
+      return matchesSearch && matchesStatus && matchesCategory;
+    });
+  }, [products, searchTerm, statusFilter, categoryFilter]);
 
   return (
     <div className="space-y-6">
@@ -51,7 +88,7 @@ const Produtos = () => {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Produtos Ativos</CardTitle>
@@ -86,21 +123,70 @@ const Produtos = () => {
             <p className="text-xs text-muted-foreground">itens vendidos</p>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Valor Total</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              R$ {valorTotalEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </div>
+            <p className="text-xs text-muted-foreground">valor do estoque</p>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Lista de Produtos</CardTitle>
+          <div className="flex gap-4 mt-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nome, SKU ou categoria..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="ativo">Ativos</SelectItem>
+                <SelectItem value="inativo">Inativos</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Categoria" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas</SelectItem>
+                {categories.map(cat => (
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <p className="text-muted-foreground">Carregando produtos...</p>
-          ) : products && products.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>SKU</TableHead>
-                  <TableHead>Título</TableHead>
+          ) : filteredProducts && filteredProducts.length > 0 ? (
+            <div>
+              <p className="text-sm text-muted-foreground mb-4">
+                Mostrando {filteredProducts.length} de {products?.length || 0} produtos
+              </p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Título</TableHead>
                   <TableHead>Categoria</TableHead>
                   <TableHead>Preço</TableHead>
                   <TableHead>Estoque</TableHead>
@@ -108,7 +194,7 @@ const Produtos = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {products.map((product) => (
+                {filteredProducts.map((product) => (
                   <TableRow 
                     key={product.id_product}
                     className="cursor-pointer hover:bg-muted/50"
@@ -130,6 +216,7 @@ const Produtos = () => {
                 ))}
               </TableBody>
             </Table>
+            </div>
           ) : (
             <p className="text-muted-foreground">Nenhum produto encontrado.</p>
           )}

@@ -3,15 +3,20 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, DollarSign, ShoppingCart, Clock } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, DollarSign, ShoppingCart, Clock, Search } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 const Pedidos = () => {
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("todos");
+  const [periodFilter, setPeriodFilter] = useState("todos");
   
   const { data: orders, isLoading } = useQuery({
     queryKey: ['orders'],
@@ -25,9 +30,40 @@ const Pedidos = () => {
     }
   });
 
-  const totalVendido = orders?.reduce((sum, order) => sum + Number(order.valor_final || 0), 0) || 0;
-  const totalPedidos = orders?.length || 0;
-  const pedidosPendentes = orders?.filter(o => o.status?.toLowerCase() === 'pendente').length || 0;
+  const filteredOrders = useMemo(() => {
+    if (!orders) return [];
+    
+    return orders.filter(order => {
+      const matchesSearch = 
+        order.id_order?.toString().includes(searchTerm) ||
+        order.customers?.nome_completo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.canal_venda?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesStatus = 
+        statusFilter === "todos" || 
+        order.status?.toLowerCase() === statusFilter.toLowerCase();
+      
+      let matchesPeriod = true;
+      if (periodFilter !== "todos" && order.data_pedido) {
+        const orderDate = new Date(order.data_pedido);
+        const now = new Date();
+        
+        if (periodFilter === "7dias") {
+          matchesPeriod = orderDate >= subDays(now, 7);
+        } else if (periodFilter === "30dias") {
+          matchesPeriod = orderDate >= subDays(now, 30);
+        } else if (periodFilter === "90dias") {
+          matchesPeriod = orderDate >= subDays(now, 90);
+        }
+      }
+      
+      return matchesSearch && matchesStatus && matchesPeriod;
+    });
+  }, [orders, searchTerm, statusFilter, periodFilter]);
+
+  const totalVendido = filteredOrders?.reduce((sum, order) => sum + Number(order.valor_final || 0), 0) || 0;
+  const totalPedidos = filteredOrders?.length || 0;
+  const pedidosPendentes = filteredOrders?.filter(o => o.status?.toLowerCase() === 'pendente').length || 0;
 
   const { data: orderItems } = useQuery({
     queryKey: ['order-items', selectedOrder?.id_order],
@@ -106,12 +142,51 @@ const Pedidos = () => {
       <Card>
         <CardHeader>
           <CardTitle>Lista de Pedidos</CardTitle>
+          <div className="flex gap-4 mt-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por número, cliente ou canal..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="pendente">Pendente</SelectItem>
+                <SelectItem value="processando">Processando</SelectItem>
+                <SelectItem value="enviado">Enviado</SelectItem>
+                <SelectItem value="entregue">Entregue</SelectItem>
+                <SelectItem value="cancelado">Cancelado</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={periodFilter} onValueChange={setPeriodFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Período" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="7dias">Últimos 7 dias</SelectItem>
+                <SelectItem value="30dias">Últimos 30 dias</SelectItem>
+                <SelectItem value="90dias">Últimos 90 dias</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <p className="text-muted-foreground">Carregando pedidos...</p>
-          ) : orders && orders.length > 0 ? (
-            <Table>
+          ) : filteredOrders && filteredOrders.length > 0 ? (
+            <div>
+              <p className="text-sm text-muted-foreground mb-4">
+                Mostrando {filteredOrders.length} de {orders?.length || 0} pedidos
+              </p>
+              <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Pedido</TableHead>
@@ -123,7 +198,7 @@ const Pedidos = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {orders.map((order) => (
+                {filteredOrders.map((order) => (
                   <TableRow 
                     key={order.id_order}
                     className="cursor-pointer hover:bg-muted/50"
@@ -150,6 +225,7 @@ const Pedidos = () => {
                 ))}
               </TableBody>
             </Table>
+            </div>
           ) : (
             <p className="text-muted-foreground">Nenhum pedido encontrado.</p>
           )}

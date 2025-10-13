@@ -3,15 +3,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Users, UserPlus, TrendingUp } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Users, UserPlus, TrendingUp, Search } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { format, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 const Clientes = () => {
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [cityFilter, setCityFilter] = useState("todas");
   
   const { data: customers, isLoading } = useQuery({
     queryKey: ['customers'],
@@ -35,6 +39,29 @@ const Clientes = () => {
       return data as any[];
     }
   });
+
+  const cities = useMemo(() => {
+    const citiesSet = new Set(customers?.map(c => c.cidade).filter(Boolean));
+    return Array.from(citiesSet);
+  }, [customers]);
+
+  const filteredCustomers = useMemo(() => {
+    if (!customers) return [];
+    
+    return customers.filter(customer => {
+      const matchesSearch = 
+        customer.nome_completo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        customer.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        customer.telefone?.includes(searchTerm) ||
+        customer.document?.includes(searchTerm);
+      
+      const matchesCity = 
+        cityFilter === "todas" || 
+        customer.cidade === cityFilter;
+      
+      return matchesSearch && matchesCity;
+    });
+  }, [customers, searchTerm, cityFilter]);
 
   const totalClientes = customers?.length || 0;
   const clientesNovos = customers?.filter(c => {
@@ -137,12 +164,38 @@ const Clientes = () => {
       <Card>
         <CardHeader>
           <CardTitle>Lista de Clientes</CardTitle>
+          <div className="flex gap-4 mt-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nome, email, telefone ou documento..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={cityFilter} onValueChange={setCityFilter}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Cidade" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas as cidades</SelectItem>
+                {cities.map(city => (
+                  <SelectItem key={city} value={city}>{city}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <p className="text-muted-foreground">Carregando clientes...</p>
-          ) : customers && customers.length > 0 ? (
-            <Table>
+          ) : filteredCustomers && filteredCustomers.length > 0 ? (
+            <div>
+              <p className="text-sm text-muted-foreground mb-4">
+                Mostrando {filteredCustomers.length} de {customers?.length || 0} clientes
+              </p>
+              <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>ID</TableHead>
@@ -154,7 +207,7 @@ const Clientes = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {customers.map((customer) => (
+                {filteredCustomers.map((customer) => (
                   <TableRow 
                     key={customer.id_client}
                     className="cursor-pointer hover:bg-muted/50"
@@ -170,6 +223,7 @@ const Clientes = () => {
                 ))}
               </TableBody>
             </Table>
+            </div>
           ) : (
             <p className="text-muted-foreground">Nenhum cliente encontrado.</p>
           )}
