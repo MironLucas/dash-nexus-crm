@@ -5,18 +5,23 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, DollarSign, ShoppingCart, Clock, Search } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Plus, DollarSign, ShoppingCart, Clock, Search, CalendarIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, subDays } from "date-fns";
+import { format, subDays, isWithinInterval } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useState, useMemo } from "react";
+import { cn } from "@/lib/utils";
+import type { DateRange } from "react-day-picker";
 
 const Pedidos = () => {
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
   const [periodFilter, setPeriodFilter] = useState("todos");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
   
   const { data: orders, isLoading } = useQuery({
     queryKey: ['orders'],
@@ -44,11 +49,20 @@ const Pedidos = () => {
         order.status?.toLowerCase() === statusFilter.toLowerCase();
       
       let matchesPeriod = true;
-      if (periodFilter !== "todos" && order.data_pedido) {
+      if (order.data_pedido) {
         const orderDate = new Date(order.data_pedido);
         const now = new Date();
         
-        if (periodFilter === "7dias") {
+        if (periodFilter === "customizado" && dateRange?.from) {
+          if (dateRange.to) {
+            matchesPeriod = isWithinInterval(orderDate, {
+              start: dateRange.from,
+              end: dateRange.to
+            });
+          } else {
+            matchesPeriod = orderDate >= dateRange.from;
+          }
+        } else if (periodFilter === "7dias") {
           matchesPeriod = orderDate >= subDays(now, 7);
         } else if (periodFilter === "30dias") {
           matchesPeriod = orderDate >= subDays(now, 30);
@@ -59,7 +73,7 @@ const Pedidos = () => {
       
       return matchesSearch && matchesStatus && matchesPeriod;
     });
-  }, [orders, searchTerm, statusFilter, periodFilter]);
+  }, [orders, searchTerm, statusFilter, periodFilter, dateRange]);
 
   const totalVendido = filteredOrders?.reduce((sum, order) => sum + Number(order.valor_final || 0), 0) || 0;
   const totalPedidos = filteredOrders?.length || 0;
@@ -165,17 +179,66 @@ const Pedidos = () => {
                 <SelectItem value="cancelado">Cancelado</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={periodFilter} onValueChange={setPeriodFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Período" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos</SelectItem>
-                <SelectItem value="7dias">Últimos 7 dias</SelectItem>
-                <SelectItem value="30dias">Últimos 30 dias</SelectItem>
-                <SelectItem value="90dias">Últimos 90 dias</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex gap-2">
+              <Select 
+                value={periodFilter} 
+                onValueChange={(value) => {
+                  setPeriodFilter(value);
+                  if (value !== "customizado") {
+                    setDateRange(undefined);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Período" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="7dias">Últimos 7 dias</SelectItem>
+                  <SelectItem value="30dias">Últimos 30 dias</SelectItem>
+                  <SelectItem value="90dias">Últimos 90 dias</SelectItem>
+                  <SelectItem value="customizado">Período Customizado</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              {periodFilter === "customizado" && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-[280px] justify-start text-left font-normal",
+                        !dateRange && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateRange?.from ? (
+                        dateRange.to ? (
+                          <>
+                            {format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })} -{" "}
+                            {format(dateRange.to, "dd/MM/yyyy", { locale: ptBR })}
+                          </>
+                        ) : (
+                          format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })
+                        )
+                      ) : (
+                        <span>Selecione o período</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="range"
+                      selected={dateRange}
+                      onSelect={setDateRange}
+                      numberOfMonths={2}
+                      locale={ptBR}
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
