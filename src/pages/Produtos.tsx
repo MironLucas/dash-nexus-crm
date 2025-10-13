@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus } from "lucide-react";
+import { Plus, Package, TrendingUp, ShoppingCart } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
@@ -23,6 +23,21 @@ const Produtos = () => {
     }
   });
 
+  const { data: soldItems } = useQuery({
+    queryKey: ['sold-items'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('itens' as any)
+        .select('id_product');
+      if (error) throw error;
+      return data as any[];
+    }
+  });
+
+  const produtosAtivos = products?.filter(p => p.ativo?.toLowerCase() === 'ativo').length || 0;
+  const estoqueTotal = products?.reduce((sum, p) => sum + Number(p.estoque || 0), 0) || 0;
+  const produtosVendidos = soldItems?.length || 0;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -34,6 +49,43 @@ const Produtos = () => {
           <Plus className="mr-2 h-4 w-4" />
           Novo Produto
         </Button>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Produtos Ativos</CardTitle>
+            <Package className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{produtosAtivos}</div>
+            <p className="text-xs text-muted-foreground">
+              de {products?.length || 0} total
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Estoque Total</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{estoqueTotal}</div>
+            <p className="text-xs text-muted-foreground">unidades</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Produtos Vendidos</CardTitle>
+            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{produtosVendidos}</div>
+            <p className="text-xs text-muted-foreground">itens vendidos</p>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
@@ -70,8 +122,8 @@ const Produtos = () => {
                     </TableCell>
                     <TableCell>{product.estoque}</TableCell>
                     <TableCell>
-                      <Badge variant={product.ativo === 'true' ? 'default' : 'secondary'}>
-                        {product.ativo === 'true' ? 'Ativo' : 'Inativo'}
+                      <Badge variant={product.ativo?.toLowerCase() === 'ativo' ? 'default' : 'secondary'}>
+                        {product.ativo || 'Inativo'}
                       </Badge>
                     </TableCell>
                   </TableRow>
@@ -124,8 +176,8 @@ const Produtos = () => {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Status</p>
-                  <Badge variant={selectedProduct.ativo === 'true' ? 'default' : 'secondary'}>
-                    {selectedProduct.ativo === 'true' ? 'Ativo' : 'Inativo'}
+                  <Badge variant={selectedProduct.ativo?.toLowerCase() === 'ativo' ? 'default' : 'secondary'}>
+                    {selectedProduct.ativo || 'Inativo'}
                   </Badge>
                 </div>
                 <div>

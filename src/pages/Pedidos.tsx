@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus } from "lucide-react";
+import { Plus, DollarSign, ShoppingCart, Clock } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
@@ -18,12 +18,16 @@ const Pedidos = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('orders' as any)
-        .select('*, customers(*)')
+        .select('*, customers(*), vendedores(nomevendedor)')
         .order('data_pedido', { ascending: false });
       if (error) throw error;
       return data as any[];
     }
   });
+
+  const totalVendido = orders?.reduce((sum, order) => sum + Number(order.valor_final || 0), 0) || 0;
+  const totalPedidos = orders?.length || 0;
+  const pedidosPendentes = orders?.filter(o => o.status?.toLowerCase() === 'pendente').length || 0;
 
   const { data: orderItems } = useQuery({
     queryKey: ['order-items', selectedOrder?.id_order],
@@ -60,6 +64,43 @@ const Pedidos = () => {
           <Plus className="mr-2 h-4 w-4" />
           Novo Pedido
         </Button>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Vendido</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              R$ {totalVendido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total de Pedidos</CardTitle>
+            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalPedidos}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pedidos Pendentes</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{pedidosPendentes}</div>
+            <p className="text-xs text-muted-foreground">
+              aguardando processamento
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
@@ -130,7 +171,7 @@ const Pedidos = () => {
                     <p><span className="text-muted-foreground">Data:</span> {selectedOrder.data_pedido ? format(new Date(selectedOrder.data_pedido), "dd/MM/yyyy HH:mm", { locale: ptBR }) : '-'}</p>
                     <p><span className="text-muted-foreground">Status:</span> <Badge variant={getStatusVariant(selectedOrder.status)}>{selectedOrder.status || 'Pendente'}</Badge></p>
                     <p><span className="text-muted-foreground">Canal de Venda:</span> {selectedOrder.canal_venda || '-'}</p>
-                    <p><span className="text-muted-foreground">Vendedor:</span> {selectedOrder.vendedor || '-'}</p>
+                    <p><span className="text-muted-foreground">Vendedor:</span> {selectedOrder.vendedores?.nomevendedor || '-'}</p>
                     <p><span className="text-muted-foreground">Transportadora:</span> {selectedOrder.transportadora || '-'}</p>
                   </div>
                 </div>

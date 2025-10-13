@@ -1,4 +1,4 @@
-import { Home, Package, ShoppingCart, Users, Settings } from "lucide-react";
+import { Home, Package, ShoppingCart, Users, Settings, UserCircle } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
   Sidebar,
@@ -17,6 +17,7 @@ const items = [
   { title: "Produtos", url: "/produtos", icon: Package },
   { title: "Pedidos", url: "/pedidos", icon: ShoppingCart },
   { title: "Clientes", url: "/clientes", icon: Users },
+  { title: "Vendedores", url: "/vendedores", icon: UserCircle },
   { title: "Configurações", url: "/configuracoes", icon: Settings },
 ];
 

@@ -164,6 +164,13 @@ export type Database = {
             referencedRelation: "customers"
             referencedColumns: ["id_client"]
           },
+          {
+            foreignKeyName: "fk_orders_vendedores"
+            columns: ["vendedor"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["vendedor"]
+          },
         ]
       }
       products: {
@@ -214,15 +221,15 @@ export type Database = {
       vendedores: {
         Row: {
           nomevendedor: string | null
-          vendedor: number | null
+          vendedor: number
         }
         Insert: {
           nomevendedor?: string | null
-          vendedor?: number | null
+          vendedor: number
         }
         Update: {
           nomevendedor?: string | null
-          vendedor?: number | null
+          vendedor?: number
         }
         Relationships: []
       }

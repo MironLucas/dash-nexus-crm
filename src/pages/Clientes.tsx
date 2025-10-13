@@ -3,11 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus } from "lucide-react";
+import { Plus, Users, UserPlus, TrendingUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 const Clientes = () => {
@@ -24,6 +24,28 @@ const Clientes = () => {
       return data as any[];
     }
   });
+
+  const { data: allOrders } = useQuery({
+    queryKey: ['all-customer-orders'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('orders' as any)
+        .select('id_client, data_pedido');
+      if (error) throw error;
+      return data as any[];
+    }
+  });
+
+  const totalClientes = customers?.length || 0;
+  const clientesNovos = customers?.filter(c => {
+    const created = new Date(c.created_at);
+    const thirtyDaysAgo = subDays(new Date(), 30);
+    return created >= thirtyDaysAgo;
+  }).length || 0;
+
+  const clientesAtivos = allOrders 
+    ? new Set(allOrders.map(o => o.id_client)).size 
+    : 0;
 
   const { data: customerOrders } = useQuery({
     queryKey: ['customer-orders', selectedCustomer?.id_client],
@@ -75,6 +97,41 @@ const Clientes = () => {
           <Plus className="mr-2 h-4 w-4" />
           Novo Cliente
         </Button>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total de Clientes</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalClientes}</div>
+            <p className="text-xs text-muted-foreground">cadastrados</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Clientes Novos</CardTitle>
+            <UserPlus className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{clientesNovos}</div>
+            <p className="text-xs text-muted-foreground">últimos 30 dias</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Clientes Ativos</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{clientesAtivos}</div>
+            <p className="text-xs text-muted-foreground">com pedidos</p>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
