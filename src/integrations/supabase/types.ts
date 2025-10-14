@@ -218,6 +218,33 @@ export type Database = {
         }
         Relationships: []
       }
+      users: {
+        Row: {
+          ativouser: string | null
+          cargo: string | null
+          emailuser: string | null
+          id_users: number
+          nome_user: string | null
+          phoneuser: number | null
+        }
+        Insert: {
+          ativouser?: string | null
+          cargo?: string | null
+          emailuser?: string | null
+          id_users: number
+          nome_user?: string | null
+          phoneuser?: number | null
+        }
+        Update: {
+          ativouser?: string | null
+          cargo?: string | null
+          emailuser?: string | null
+          id_users?: number
+          nome_user?: string | null
+          phoneuser?: number | null
+        }
+        Relationships: []
+      }
       vendedores: {
         Row: {
           nomevendedor: string | null

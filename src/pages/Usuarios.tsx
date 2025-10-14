@@ -42,7 +42,7 @@ const Usuarios = () => {
         .order("id_users", { ascending: false });
 
       if (error) throw error;
-      setUsuarios(data || []);
+      setUsuarios((data || []) as any);
     } catch (error) {
       console.error("Erro ao buscar usuários:", error);
       toast({
@@ -73,7 +73,7 @@ const Usuarios = () => {
             emailuser: newUser.email,
             cargo: newUser.cargo,
             ativouser: "ativo",
-          },
+          } as any,
         ]);
 
       if (error) throw error;
@@ -117,7 +117,7 @@ const Usuarios = () => {
     try {
       const { error } = await supabase
         .from("users")
-        .update({ ativouser: newStatus })
+        .update({ ativouser: newStatus } as any)
         .eq("id_users", userId);
 
       if (error) throw error;

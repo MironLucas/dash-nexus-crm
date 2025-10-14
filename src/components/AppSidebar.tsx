@@ -41,7 +41,7 @@ export function AppSidebar() {
             .eq("emailuser", user.email)
             .single();
           
-          setUserRole(data?.cargo || null);
+          setUserRole((data as any)?.cargo || null);
         }
       } catch (error) {
         console.error("Erro ao buscar role do usuário:", error);
