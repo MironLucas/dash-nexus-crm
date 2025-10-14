@@ -231,7 +231,7 @@ export type Database = {
           ativouser?: string | null
           cargo?: string | null
           emailuser?: string | null
-          id_users: number
+          id_users?: number
           nome_user?: string | null
           phoneuser?: number | null
         }
