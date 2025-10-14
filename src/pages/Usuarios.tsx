@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -36,13 +35,17 @@ const Usuarios = () => {
 
   const fetchUsuarios = async () => {
     try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("*")
-        .order("id_users", { ascending: false });
-
-      if (error) throw error;
-      setUsuarios((data || []) as any);
+      const response = await fetch(
+        `https://jckwavzrpyczdkbwxnqb.supabase.co/rest/v1/users?select=*&order=id_users.desc`,
+        {
+          headers: {
+            apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impja3dhdnpycHljemRrYnd4bnFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwMjU1MTcsImV4cCI6MjA3NTYwMTUxN30.JrEwf_IP-eeO194tKAxe6fp-1ZQH80D1oL4PRF4pl_c",
+            Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impja3dhdnpycHljemRrYnd4bnFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwMjU1MTcsImV4cCI6MjA3NTYwMTUxN30.JrEwf_IP-eeO194tKAxe6fp-1ZQH80D1oL4PRF4pl_c"
+          }
+        }
+      );
+      const data = await response.json();
+      setUsuarios(data || []);
     } catch (error) {
       console.error("Erro ao buscar usuários:", error);
       toast({
@@ -66,17 +69,25 @@ const Usuarios = () => {
     }
 
     try {
-      const { error } = await supabase
-        .from("users")
-        .insert([
-          {
+      const response = await fetch(
+        `https://jckwavzrpyczdkbwxnqb.supabase.co/rest/v1/users`,
+        {
+          method: "POST",
+          headers: {
+            apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impja3dhdnpycHljemRrYnd4bnFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwMjU1MTcsImV4cCI6MjA3NTYwMTUxN30.JrEwf_IP-eeO194tKAxe6fp-1ZQH80D1oL4PRF4pl_c",
+            Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impja3dhdnpycHljemRrYnd4bnFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwMjU1MTcsImV4cCI6MjA3NTYwMTUxN30.JrEwf_IP-eeO194tKAxe6fp-1ZQH80D1oL4PRF4pl_c",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+          },
+          body: JSON.stringify({
             emailuser: newUser.email,
             cargo: newUser.cargo,
             ativouser: "ativo",
-          } as any,
-        ]);
+          })
+        }
+      );
 
-      if (error) throw error;
+      if (!response.ok) throw new Error("Erro ao criar usuário");
 
       toast({
         title: "Sucesso",
@@ -115,12 +126,21 @@ const Usuarios = () => {
     const newStatus = currentStatus === "ativo" ? "inativo" : "ativo";
     
     try {
-      const { error } = await supabase
-        .from("users")
-        .update({ ativouser: newStatus } as any)
-        .eq("id_users", userId);
+      const response = await fetch(
+        `https://jckwavzrpyczdkbwxnqb.supabase.co/rest/v1/users?id_users=eq.${userId}`,
+        {
+          method: "PATCH",
+          headers: {
+            apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impja3dhdnpycHljemRrYnd4bnFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwMjU1MTcsImV4cCI6MjA3NTYwMTUxN30.JrEwf_IP-eeO194tKAxe6fp-1ZQH80D1oL4PRF4pl_c",
+            Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impja3dhdnpycHljemRrYnd4bnFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwMjU1MTcsImV4cCI6MjA3NTYwMTUxN30.JrEwf_IP-eeO194tKAxe6fp-1ZQH80D1oL4PRF4pl_c",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+          },
+          body: JSON.stringify({ ativouser: newStatus })
+        }
+      );
 
-      if (error) throw error;
+      if (!response.ok) throw new Error("Erro ao atualizar status");
 
       toast({
         title: "Sucesso",

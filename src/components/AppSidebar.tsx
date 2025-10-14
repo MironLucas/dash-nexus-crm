@@ -35,13 +35,17 @@ export function AppSidebar() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user?.email) {
-          const { data } = await supabase
-            .from("users")
-            .select("cargo")
-            .eq("emailuser", user.email)
-            .single();
-          
-          setUserRole((data as any)?.cargo || null);
+          const response = await fetch(
+            `https://jckwavzrpyczdkbwxnqb.supabase.co/rest/v1/users?emailuser=eq.${encodeURIComponent(user.email)}&select=cargo`,
+            {
+              headers: {
+                apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impja3dhdnpycHljemRrYnd4bnFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwMjU1MTcsImV4cCI6MjA3NTYwMTUxN30.JrEwf_IP-eeO194tKAxe6fp-1ZQH80D1oL4PRF4pl_c",
+                Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impja3dhdnpycHljemRrYnd4bnFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwMjU1MTcsImV4cCI6MjA3NTYwMTUxN30.JrEwf_IP-eeO194tKAxe6fp-1ZQH80D1oL4PRF4pl_c"
+              }
+            }
+          );
+          const data = await response.json();
+          setUserRole(data?.[0]?.cargo || null);
         }
       } catch (error) {
         console.error("Erro ao buscar role do usuário:", error);
