@@ -27,7 +27,8 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("RESEND_API_KEY não configurada");
     }
 
-    // Enviar email usando a API do Resend diretamente
+    // NOTA: Por enquanto envia para mironlucas22@gmail.com até o domínio ser verificado
+    // Depois que verificar o domínio no Resend, altere o 'from' para usar seu domínio
     const emailResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -36,12 +37,12 @@ const handler = async (req: Request): Promise<Response> => {
       },
       body: JSON.stringify({
         from: "onboarding@resend.dev",
-        to: [email],
-        subject: "Convite para acessar o CRM",
+        to: ["mironlucas22@gmail.com"], // Temporariamente enviando só para você até verificar domínio
+        subject: `Convite para acessar o CRM - ${email}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h1 style="color: #333;">Bem-vindo ao nosso CRM!</h1>
-            <p>Você foi convidado para acessar nossa plataforma.</p>
+            <h1 style="color: #333;">Convite para ${email}</h1>
+            <p>Um convite foi criado para: <strong>${email}</strong></p>
             ${cargo ? `<p><strong>Cargo:</strong> ${cargo}</p>` : ''}
             <p>Para acessar o sistema, clique no botão abaixo:</p>
             <div style="text-align: center; margin: 30px 0;">
@@ -51,7 +52,8 @@ const handler = async (req: Request): Promise<Response> => {
               </a>
             </div>
             <p style="color: #666; font-size: 12px; margin-top: 30px;">
-              Se você não solicitou este convite, pode ignorar este email.
+              NOTA: Este email está sendo enviado para você porque seu domínio ainda não foi verificado no Resend.
+              Após verificar o domínio, os emails serão enviados diretamente para ${email}.
             </p>
           </div>
         `,

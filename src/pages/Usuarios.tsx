@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, UserPlus, Mail, Users as UsersIcon } from "lucide-react";
+import { Search, UserPlus, Mail, Users as UsersIcon, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface User {
@@ -174,6 +174,41 @@ const Usuarios = () => {
       toast({
         title: "Erro",
         description: "Não foi possível atualizar o status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteUser = async (userId: number, email: string | null) => {
+    if (!confirm(`Tem certeza que deseja deletar o usuário ${email}?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `https://jckwavzrpyczdkbwxnqb.supabase.co/rest/v1/users?id_users=eq.${userId}`,
+        {
+          method: "DELETE",
+          headers: {
+            apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impja3dhdnpycHljemRrYnd4bnFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwMjU1MTcsImV4cCI6MjA3NTYwMTUxN30.JrEwf_IP-eeO194tKAxe6fp-1ZQH80D1oL4PRF4pl_c",
+            Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impja3dhdnpycHljemRrYnd4bnFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwMjU1MTcsImV4cCI6MjA3NTYwMTUxN30.JrEwf_IP-eeO194tKAxe6fp-1ZQH80D1oL4PRF4pl_c",
+          }
+        }
+      );
+
+      if (!response.ok) throw new Error("Erro ao deletar usuário");
+
+      toast({
+        title: "Sucesso",
+        description: "Usuário deletado com sucesso",
+      });
+
+      fetchUsuarios();
+    } catch (error) {
+      console.error("Erro ao deletar usuário:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível deletar o usuário",
         variant: "destructive",
       });
     }
@@ -346,7 +381,15 @@ const Usuarios = () => {
                           onClick={() => sendInviteEmail(user.emailuser || "", user.cargo || "")}
                         >
                           <Mail className="mr-1 h-3 w-3" />
-                          Reenviar Email
+                          Reenviar
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDeleteUser(user.id_users, user.emailuser)}
+                        >
+                          <Trash2 className="mr-1 h-3 w-3" />
+                          Deletar
                         </Button>
                       </div>
                     </TableCell>
