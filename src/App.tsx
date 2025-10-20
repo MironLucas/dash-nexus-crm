@@ -11,6 +11,7 @@ import Clientes from "./pages/Clientes";
 import Vendedores from "./pages/Vendedores";
 import Configuracoes from "./pages/Configuracoes";
 import Usuarios from "./pages/Usuarios";
+import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -21,19 +22,18 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Layout>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/produtos" element={<Produtos />} />
-            <Route path="/pedidos" element={<Pedidos />} />
-            <Route path="/clientes" element={<Clientes />} />
-            <Route path="/vendedores" element={<Vendedores />} />
-            <Route path="/usuarios" element={<Usuarios />} />
-            <Route path="/configuracoes" element={<Configuracoes />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Layout>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route element={<Layout><Index /></Layout>} path="/" />
+          <Route element={<Layout><Produtos /></Layout>} path="/produtos" />
+          <Route element={<Layout><Pedidos /></Layout>} path="/pedidos" />
+          <Route element={<Layout><Clientes /></Layout>} path="/clientes" />
+          <Route element={<Layout><Vendedores /></Layout>} path="/vendedores" />
+          <Route element={<Layout><Usuarios /></Layout>} path="/usuarios" />
+          <Route element={<Layout><Configuracoes /></Layout>} path="/configuracoes" />
+          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

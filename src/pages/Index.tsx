@@ -1,10 +1,12 @@
 import { DashboardCard } from "@/components/DashboardCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, ShoppingCart, Users, TrendingUp } from "lucide-react";
+import { DollarSign, ShoppingCart, Users, TrendingUp, Eye, MousePointer, ShoppingBag } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
+import { format, subMonths, startOfMonth, endOfMonth, startOfDay, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AreaChart,
   Area,
@@ -30,6 +32,25 @@ const COLORS = [
 ];
 
 const Index = () => {
+  const navigate = useNavigate();
+
+  // Check authentication
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        navigate("/login");
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session) {
+        navigate("/login");
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
   // Buscar dados de pedidos
   const { data: orders } = useQuery({
     queryKey: ['orders'],
@@ -60,7 +81,26 @@ const Index = () => {
     }
   });
 
-  // Calcular métricas
+  // Calcular métricas hoje vs ontem
+  const today = startOfDay(new Date());
+  const yesterday = startOfDay(subDays(new Date(), 1));
+
+  const todayOrders = orders?.filter(order => {
+    const orderDate = startOfDay(new Date(order.data_pedido));
+    return orderDate.getTime() === today.getTime();
+  }) || [];
+
+  const yesterdayOrders = orders?.filter(order => {
+    const orderDate = startOfDay(new Date(order.data_pedido));
+    return orderDate.getTime() === yesterday.getTime();
+  }) || [];
+
+  const todayRevenue = todayOrders.reduce((sum, order) => sum + (Number(order.valor_final) || 0), 0);
+  const yesterdayRevenue = yesterdayOrders.reduce((sum, order) => sum + (Number(order.valor_final) || 0), 0);
+  const revenueChange = yesterdayRevenue > 0 ? ((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100 : 0;
+
+  const ordersChange = yesterdayOrders.length > 0 ? ((todayOrders.length - yesterdayOrders.length) / yesterdayOrders.length) * 100 : 0;
+
   const totalRevenue = orders?.reduce((sum, order) => sum + (Number(order.valor_final) || 0), 0) || 0;
   const totalOrders = orders?.length || 0;
   const totalCustomers = customers?.length || 0;
@@ -109,11 +149,13 @@ const Index = () => {
           title="Receita Total"
           value={`R$ ${totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           icon={DollarSign}
+          percentChange={revenueChange}
         />
         <DashboardCard
           title="Vendas"
           value={totalOrders.toString()}
           icon={ShoppingCart}
+          percentChange={ordersChange}
         />
         <DashboardCard
           title="Clientes"
@@ -126,6 +168,53 @@ const Index = () => {
           icon={TrendingUp}
         />
       </div>
+
+      {/* Analytics Section - Placeholder for Google Analytics data */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Analytics do Site (Google Analytics)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Usuários Ativos</CardTitle>
+                <Eye className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">-</div>
+                <p className="text-xs text-muted-foreground">
+                  Conecte o Google Analytics
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Taxa de Cliques</CardTitle>
+                <MousePointer className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">-</div>
+                <p className="text-xs text-muted-foreground">
+                  Conecte o Google Analytics
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Carrinhos Abandonados</CardTitle>
+                <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">-</div>
+                <p className="text-xs text-muted-foreground">
+                  Conecte o Google Analytics
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
