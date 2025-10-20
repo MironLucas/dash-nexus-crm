@@ -99,7 +99,7 @@ const Usuarios = () => {
       fetchUsuarios();
 
       // Enviar email de convite
-      await sendInviteEmail(newUser.email);
+      await sendInviteEmail(newUser.email, newUser.cargo);
     } catch (error) {
       console.error("Erro ao criar usuário:", error);
       toast({
@@ -110,15 +110,36 @@ const Usuarios = () => {
     }
   };
 
-  const sendInviteEmail = async (email: string) => {
+  const sendInviteEmail = async (email: string, cargo?: string) => {
     try {
-      // Aqui você vai chamar a edge function de envio de email
+      const response = await fetch(
+        `https://jckwavzrpyczdkbwxnqb.supabase.co/functions/v1/send-invite`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email, cargo })
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Erro ao enviar email");
+      }
+
       toast({
         title: "Email enviado",
         description: "Convite enviado para " + email,
       });
     } catch (error) {
       console.error("Erro ao enviar email:", error);
+      toast({
+        title: "Erro ao enviar email",
+        description: "Não foi possível enviar o convite",
+        variant: "destructive",
+      });
     }
   };
 
@@ -311,13 +332,23 @@ const Usuarios = () => {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => toggleUserStatus(user.id_users, user.ativouser)}
-                      >
-                        {user.ativouser === "ativo" ? "Desativar" : "Ativar"}
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toggleUserStatus(user.id_users, user.ativouser)}
+                        >
+                          {user.ativouser === "ativo" ? "Desativar" : "Ativar"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => sendInviteEmail(user.emailuser || "", user.cargo || "")}
+                        >
+                          <Mail className="mr-1 h-3 w-3" />
+                          Reenviar Email
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
