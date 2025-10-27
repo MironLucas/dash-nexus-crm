@@ -75,8 +75,8 @@ const Login = () => {
     setResetLoading(true);
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-        redirectTo: `${window.location.origin}/login`,
+      const { error } = await supabase.functions.invoke("send-password-reset", {
+        body: { email: resetEmail },
       });
 
       if (error) {
