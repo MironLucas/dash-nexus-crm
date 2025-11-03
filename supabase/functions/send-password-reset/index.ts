@@ -47,6 +47,23 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (resetError) {
       console.error("Erro ao gerar link de reset:", resetError);
+      // Evita erro no app e não expõe existência do usuário
+      // Se o usuário não existir, retornamos sucesso genérico
+      const status = (resetError as any)?.status;
+      const code = (resetError as any)?.code;
+      if (status === 404 || code === "user_not_found") {
+        console.warn("Usuário não encontrado. Retornando sucesso genérico para evitar enumeração.");
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: "Se existir uma conta para este email, enviaremos instruções para redefinir a senha.",
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          }
+        );
+      }
       throw resetError;
     }
 
