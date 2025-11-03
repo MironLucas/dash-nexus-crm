@@ -1,34 +1,81 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.75.0';
+
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
 
 interface InviteEmailRequest {
   email: string;
-  cargo?: string;
+  cargo: 'admin' | 'gerente' | 'vendedor';
+  nome: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
-  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { email, cargo }: InviteEmailRequest = await req.json();
+    const { email, cargo, nome }: InviteEmailRequest = await req.json();
+    console.info("Enviando convite para:", email, "Cargo:", cargo);
 
-    console.log("Enviando convite para:", email);
-
-    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-    
-    if (!RESEND_API_KEY) {
-      throw new Error("RESEND_API_KEY não configurada");
+    if (!Deno.env.get("RESEND_API_KEY")) {
+      throw new Error("RESEND_API_KEY não está configurada");
     }
 
-    // NOTA: Por enquanto envia para mironlucas22@gmail.com até o domínio ser verificado
-    // Depois que verificar o domínio no Resend, altere o 'from' para usar seu domínio
+    // Criar cliente Supabase Admin
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
+    );
+
+    // Criar usuário com convite
+    const { data: userData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+      email,
+      {
+        data: {
+          nome: nome,
+          cargo: cargo
+        },
+        redirectTo: `${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app')}/completar-cadastro`
+      }
+    );
+
+    if (inviteError) {
+      console.error("Erro ao criar convite:", inviteError);
+      throw inviteError;
+    }
+
+    console.info("Usuário convidado:", userData.user?.id);
+
+    // Inserir role do usuário
+    const { error: roleError } = await supabaseAdmin
+      .from('user_roles')
+      .insert({
+        user_id: userData.user?.id,
+        role: cargo
+      });
+
+    if (roleError) {
+      console.error("Erro ao inserir role:", roleError);
+      // Não falha a requisição, apenas loga o erro
+    }
+
+    // Enviar email customizado usando Resend API
+    const cargoLabel = cargo === 'admin' ? 'Administrador' : cargo === 'gerente' ? 'Gerente' : 'Vendedor';
+    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+    
     const emailResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -36,30 +83,25 @@ const handler = async (req: Request): Promise<Response> => {
         "Authorization": `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: "onboarding@resend.dev",
-        to: ["mironlucas22@gmail.com"], // Temporariamente enviando só para você até verificar domínio
-        subject: `Convite para acessar o CRM - ${email}`,
+        from: "Sistema CRM <onboarding@resend.dev>",
+        to: [email],
+        subject: "Convite para acessar o CRM",
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h1 style="color: #333;">Convite para ${email}</h1>
-            <p>Um convite foi criado para: <strong>${email}</strong></p>
-            ${cargo ? `<p><strong>Cargo:</strong> ${cargo}</p>` : ''}
-            <p>Para acessar o sistema, clique no botão abaixo:</p>
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="https://seu-dominio.com" 
-                 style="background-color: #4CAF50; color: white; padding: 14px 28px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                Acessar CRM
-              </a>
-            </div>
-            <p style="color: #666; font-size: 12px; margin-top: 30px;">
-              NOTA: Este email está sendo enviado para você porque seu domínio ainda não foi verificado no Resend.
-              Após verificar o domínio, os emails serão enviados diretamente para ${email}.
-            </p>
-          </div>
+          <h1>Olá, ${nome}!</h1>
+          <p>Você foi convidado para fazer parte da nossa equipe como <strong>${cargoLabel}</strong>.</p>
+          <p>Para completar seu cadastro e criar sua senha, clique no link abaixo:</p>
+          <p style="margin: 30px 0;">
+            <a href="${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app')}/completar-cadastro" 
+               style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              Aceitar Convite e Criar Senha
+            </a>
+          </p>
+          <p>Se você não solicitou este convite, pode ignorar este email.</p>
+          <p>Atenciosamente,<br>Equipe CRM</p>
         `,
       }),
     });
-
+    
     const emailData = await emailResponse.json();
 
     if (!emailResponse.ok) {
@@ -67,9 +109,13 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error(emailData.message || "Erro ao enviar email");
     }
 
-    console.log("Email enviado com sucesso:", emailData);
+    console.info("Email enviado com sucesso:", emailData);
 
-    return new Response(JSON.stringify({ success: true, data: emailData }), {
+    return new Response(JSON.stringify({ 
+      success: true,
+      userId: userData.user?.id,
+      emailId: emailData.id 
+    }), {
       status: 200,
       headers: {
         "Content-Type": "application/json",
@@ -77,9 +123,9 @@ const handler = async (req: Request): Promise<Response> => {
       },
     });
   } catch (error: any) {
-    console.error("Erro ao enviar email:", error);
+    console.error("Erro ao enviar convite:", error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ error: error.message }),
       {
         status: 500,
         headers: { "Content-Type": "application/json", ...corsHeaders },

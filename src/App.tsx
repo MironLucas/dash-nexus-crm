@@ -12,6 +12,7 @@ import Vendedores from "./pages/Vendedores";
 import Configuracoes from "./pages/Configuracoes";
 import Usuarios from "./pages/Usuarios";
 import Login from "./pages/Login";
+import CompletarCadastro from "./pages/CompletarCadastro";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/completar-cadastro" element={<CompletarCadastro />} />
           <Route element={<Layout><Index /></Layout>} path="/" />
           <Route element={<Layout><Produtos /></Layout>} path="/produtos" />
           <Route element={<Layout><Pedidos /></Layout>} path="/pedidos" />
