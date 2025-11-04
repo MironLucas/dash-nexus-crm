@@ -24,9 +24,7 @@ const handler = async (req: Request): Promise<Response> => {
     const { email, cargo, nome }: InviteEmailRequest = await req.json();
     console.info("Enviando convite para:", email, "Cargo:", cargo);
 
-    if (!Deno.env.get("RESEND_API_KEY")) {
-      throw new Error("RESEND_API_KEY não está configurada");
-    }
+    // Resend é opcional. Se não houver API key, seguimos apenas com o invite do Supabase
 
     // Criar cliente Supabase Admin
     const supabaseAdmin = createClient(
@@ -54,20 +52,13 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (inviteError) {
       console.error("Erro ao criar convite:", inviteError);
-      
-      // Se o usuário já existe, retornar erro específico
+      // Se o usuário já existe, retornar 200 com payload amigável
       if (inviteError.message?.includes('already been registered')) {
         return new Response(
-          JSON.stringify({ 
-            error: 'Este email já está cadastrado no sistema'
-          }),
-          {
-            status: 409,
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          }
+          JSON.stringify({ success: false, code: 'email_exists', error: 'Este email já está cadastrado no sistema.' }),
+          { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
         );
       }
-      
       throw inviteError;
     }
 
@@ -86,49 +77,64 @@ const handler = async (req: Request): Promise<Response> => {
       // Não falha a requisição, apenas loga o erro
     }
 
-    // Enviar email customizado usando Resend API
+    // Enviar email customizado usando Resend API (opcional)
     const cargoLabel = cargo === 'admin' ? 'Administrador' : cargo === 'gerente' ? 'Gerente' : 'Vendedor';
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-    
-    const emailResponse = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${RESEND_API_KEY}`,
-      },
-      body: JSON.stringify({
-        from: "Sistema CRM <onboarding@resend.dev>",
-        to: [email],
-        subject: "Convite para acessar o CRM",
-        html: `
-          <h1>Olá, ${nome}!</h1>
-          <p>Você foi convidado para fazer parte da nossa equipe como <strong>${cargoLabel}</strong>.</p>
-          <p>Para completar seu cadastro e criar sua senha, clique no link abaixo:</p>
-          <p style="margin: 30px 0;">
-            <a href="${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app')}/completar-cadastro" 
-               style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-              Aceitar Convite e Criar Senha
-            </a>
-          </p>
-          <p>Se você não solicitou este convite, pode ignorar este email.</p>
-          <p>Atenciosamente,<br>Equipe CRM</p>
-        `,
-      }),
-    });
-    
-    const emailData = await emailResponse.json();
 
-    if (!emailResponse.ok) {
-      console.error("Erro ao enviar email:", emailData);
-      throw new Error(emailData.message || "Erro ao enviar email");
+    let emailStatus = 'skipped';
+    let emailId: string | undefined = undefined;
+
+    if (RESEND_API_KEY) {
+      try {
+        const emailResponse = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${RESEND_API_KEY}`,
+          },
+          body: JSON.stringify({
+            from: "Sistema CRM <onboarding@resend.dev>",
+            to: [email],
+            subject: "Convite para acessar o CRM",
+            html: `
+              <h1>Olá, ${nome}!</h1>
+              <p>Você foi convidado para fazer parte da nossa equipe como <strong>${cargoLabel}</strong>.</p>
+              <p>Para completar seu cadastro e criar sua senha, clique no link abaixo:</p>
+              <p style="margin: 30px 0;">
+                <a href="${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app')}/completar-cadastro" 
+                   style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                  Aceitar Convite e Criar Senha
+                </a>
+              </p>
+              <p>Se você não solicitou este convite, pode ignorar este email.</p>
+              <p>Atenciosamente,<br>Equipe CRM</p>
+            `,
+          }),
+        });
+
+        const emailData = await emailResponse.json();
+        if (!emailResponse.ok) {
+          console.error("Erro ao enviar email Resend:", emailData);
+          emailStatus = 'failed';
+        } else {
+          console.info("Email enviado com sucesso:", emailData);
+          emailStatus = 'sent';
+          emailId = emailData.id;
+        }
+      } catch (e) {
+        console.error('Falha ao enviar email com Resend:', e);
+        emailStatus = 'failed';
+      }
+    } else {
+      console.info('RESEND_API_KEY ausente - pulando envio de email customizado');
+      emailStatus = 'not_configured';
     }
-
-    console.info("Email enviado com sucesso:", emailData);
 
     return new Response(JSON.stringify({ 
       success: true,
       userId: userData.user?.id,
-      emailId: emailData.id 
+      emailStatus,
+      emailId
     }), {
       status: 200,
       headers: {

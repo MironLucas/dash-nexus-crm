@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Search, UserPlus, Mail, Users, UserCheck, UserX, Trash2 } from "lucide-react";
@@ -85,7 +85,7 @@ const Usuarios = () => {
       setCreatingUser(true);
 
       // Enviar convite através da edge function
-      const { error: inviteError } = await supabase.functions.invoke('send-invite', {
+      const { data, error: inviteError } = await supabase.functions.invoke('send-invite', {
         body: {
           email: newUserEmail,
           cargo: newUserCargo,
@@ -97,9 +97,23 @@ const Usuarios = () => {
         throw inviteError;
       }
 
+      if (data?.success === false || data?.error || data?.code === 'email_exists') {
+        toast({
+          variant: "destructive",
+          title: "Não foi possível enviar o convite",
+          description: data?.error || "Este email já está cadastrado no sistema.",
+        });
+        return;
+      }
+
+      const emailInfo = data?.emailStatus === 'sent' ? 'Email enviado com sucesso.' :
+        data?.emailStatus === 'not_configured' ? 'Convite criado. Email customizado não enviado (Resend não configurado).' :
+        data?.emailStatus === 'failed' ? 'Convite criado. Email customizado falhou (modo de teste do Resend).' :
+        'Convite criado.';
+
       toast({
-        title: "Convite enviado com sucesso!",
-        description: `Um email foi enviado para ${newUserEmail}`,
+        title: "Convite processado",
+        description: emailInfo,
       });
 
       setCreateDialogOpen(false);
@@ -125,7 +139,7 @@ const Usuarios = () => {
 
   const resendInvite = async (email: string, nome: string, cargo: string) => {
     try {
-      const { error } = await supabase.functions.invoke("send-invite", {
+      const { data, error } = await supabase.functions.invoke("send-invite", {
         body: { email, cargo, nome },
       });
 
@@ -133,9 +147,23 @@ const Usuarios = () => {
         throw error;
       }
 
+      if (data?.success === false || data?.error || data?.code === 'email_exists') {
+        toast({
+          variant: "destructive",
+          title: "Não foi possível reenviar",
+          description: data?.error || "Este email já está cadastrado no sistema.",
+        });
+        return;
+      }
+
+      const emailInfo = data?.emailStatus === 'sent' ? 'Email reenviado com sucesso.' :
+        data?.emailStatus === 'not_configured' ? 'Convite existente. Email customizado não enviado (Resend não configurado).' :
+        data?.emailStatus === 'failed' ? 'Convite existente. Email customizado falhou (modo de teste do Resend).' :
+        'Convite existente.';
+
       toast({
-        title: "Convite reenviado",
-        description: `Email reenviado para ${email}`,
+        title: "Convite processado",
+        description: emailInfo,
       });
     } catch (error: any) {
       console.error("Erro ao reenviar convite:", error);
@@ -204,6 +232,7 @@ const Usuarios = () => {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Criar Novo Usuário</DialogTitle>
+              <DialogDescription>Preencha os dados do novo usuário para enviar o convite por email.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
