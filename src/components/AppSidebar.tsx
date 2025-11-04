@@ -12,7 +12,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
+  SidebarFooter,
 } from "@/components/ui/sidebar";
+import { UserProfile } from "@/components/UserProfile";
 
 const allItems = [
   { title: "Inicial", url: "/", icon: Home, allowedRoles: ["admin", "gerente"] },
@@ -97,6 +99,9 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter className="border-t border-sidebar-border">
+        <UserProfile isCollapsed={isCollapsed} />
+      </SidebarFooter>
     </Sidebar>
   );
 }
