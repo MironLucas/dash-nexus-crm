@@ -54,6 +54,20 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (inviteError) {
       console.error("Erro ao criar convite:", inviteError);
+      
+      // Se o usuário já existe, retornar erro específico
+      if (inviteError.message?.includes('already been registered')) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Este email já está cadastrado no sistema'
+          }),
+          {
+            status: 409,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          }
+        );
+      }
+      
       throw inviteError;
     }
 

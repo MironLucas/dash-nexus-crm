@@ -45,35 +45,20 @@ const Usuarios = () => {
     try {
       setLoading(true);
       
-      // Buscar usuários do auth
-      const { data: { users }, error: authError } = await supabase.auth.admin.listUsers();
+      // Buscar usuários através da edge function
+      const { data, error } = await supabase.functions.invoke('list-users');
       
-      if (authError) {
-        console.error("Erro ao buscar usuários:", authError);
+      if (error) {
+        console.error("Erro ao buscar usuários:", error);
         toast({
           variant: "destructive",
           title: "Erro ao carregar usuários",
-          description: authError.message,
+          description: error.message,
         });
         return;
       }
 
-      // Buscar roles de todos os usuários
-      const { data: rolesData, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('user_id, role');
-
-      if (rolesError) {
-        console.error("Erro ao buscar roles:", rolesError);
-      }
-
-      // Mapear roles para os usuários
-      const usersWithRoles = users.map(user => ({
-        ...user,
-        role: rolesData?.find(r => r.user_id === user.id)?.role
-      }));
-
-      setUsuarios(usersWithRoles || []);
+      setUsuarios(data.users || []);
     } catch (error) {
       console.error("Erro ao buscar usuários:", error);
       toast({
@@ -164,7 +149,9 @@ const Usuarios = () => {
 
   const handleDeleteUser = async (userId: string) => {
     try {
-      const { error } = await supabase.auth.admin.deleteUser(userId);
+      const { error } = await supabase.functions.invoke('delete-user', {
+        body: { userId }
+      });
 
       if (error) {
         throw error;
