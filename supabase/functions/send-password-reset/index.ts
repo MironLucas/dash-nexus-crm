@@ -41,7 +41,7 @@ const handler = async (req: Request): Promise<Response> => {
       type: 'recovery',
       email: email,
       options: {
-        redirectTo: `${req.headers.get("origin")}/login`,
+        redirectTo: `${req.headers.get("origin")}/reset-password`,
       },
     });
 
