@@ -106,9 +106,10 @@ const Usuarios = () => {
         return;
       }
 
-      const emailInfo = data?.emailStatus === 'sent' ? 'Email enviado com sucesso.' :
-        data?.emailStatus === 'not_configured' ? 'Convite criado. Email customizado não enviado (Resend não configurado).' :
-        data?.emailStatus === 'failed' ? 'Convite criado. Email customizado falhou (modo de teste do Resend).' :
+      const emailInfo = data?.emailStatus === 'sent' ? 'Email customizado enviado.' :
+        data?.emailStatus === 'system_sent' ? 'Convite enviado por email (Supabase).' :
+        data?.emailStatus === 'not_configured' ? 'Convite enviado por email (Supabase). Email customizado opcional não configurado.' :
+        data?.emailStatus === 'failed' ? 'Convite enviado por email (Supabase). Email customizado falhou (modo de teste do Resend).' :
         'Convite criado.';
 
       toast({
@@ -156,8 +157,9 @@ const Usuarios = () => {
         return;
       }
 
-      const emailInfo = data?.emailStatus === 'sent' ? 'Email reenviado com sucesso.' :
-        data?.emailStatus === 'not_configured' ? 'Convite existente. Email customizado não enviado (Resend não configurado).' :
+      const emailInfo = data?.emailStatus === 'sent' ? 'Email customizado enviado.' :
+        data?.emailStatus === 'system_sent' ? 'Convite reenviado (link gerado). Se você não configurou o Resend, copie o link do email do Supabase.' :
+        data?.emailStatus === 'not_configured' ? 'Convite existente. Email customizado opcional não configurado.' :
         data?.emailStatus === 'failed' ? 'Convite existente. Email customizado falhou (modo de teste do Resend).' :
         'Convite existente.';
 

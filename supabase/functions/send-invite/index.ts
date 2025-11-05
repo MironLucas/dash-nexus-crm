@@ -53,6 +53,7 @@ const handler = async (req: Request): Promise<Response> => {
     
     const redirectUrl = `${frontendUrl}/completar-cadastro`;
     console.info("Redirect URL:", redirectUrl);
+    let emailActionLink: string | null = null;
 
     // Verificar se o usuário já existe
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
@@ -80,6 +81,8 @@ const handler = async (req: Request): Promise<Response> => {
         console.error("Erro ao gerar link de convite:", linkError);
         throw linkError;
       }
+
+      emailActionLink = linkData?.properties?.action_link || null;
 
       userData = { user: existingUser };
       
@@ -144,53 +147,59 @@ const handler = async (req: Request): Promise<Response> => {
     const cargoLabel = cargo === 'admin' ? 'Administrador' : cargo === 'gerente' ? 'Gerente' : 'Vendedor';
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
-    let emailStatus = 'skipped';
+    let emailStatus: 'sent' | 'failed' | 'not_configured' | 'system_sent' = emailActionLink ? 'skipped' as any : 'system_sent';
     let emailId: string | undefined = undefined;
 
-    if (RESEND_API_KEY) {
-      try {
-        const emailResponse = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${RESEND_API_KEY}`,
-          },
-          body: JSON.stringify({
-            from: "Sistema CRM <onboarding@resend.dev>",
-            to: [email],
-            subject: "Convite para acessar o CRM",
-            html: `
-              <h1>Olá, ${nome}!</h1>
-              <p>Você foi convidado para fazer parte da nossa equipe como <strong>${cargoLabel}</strong>.</p>
-              <p>Para completar seu cadastro e criar sua senha, clique no link abaixo:</p>
-              <p style="margin: 30px 0;">
-                <a href="${frontendUrl}/completar-cadastro" 
-                   style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-                  Aceitar Convite e Criar Senha
-                </a>
-              </p>
-              <p>Se você não solicitou este convite, pode ignorar este email.</p>
-              <p>Atenciosamente,<br>Equipe CRM</p>
-            `,
-          }),
-        });
+    // Somente enviaremos email customizado se geramos um link de convite manual (usuário já existia)
+    if (emailActionLink) {
+      if (RESEND_API_KEY) {
+        try {
+          const emailResponse = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${RESEND_API_KEY}`,
+            },
+            body: JSON.stringify({
+              from: "Sistema CRM <onboarding@resend.dev>",
+              to: [email],
+              subject: "Convite para acessar o CRM",
+              html: `
+                <h1>Olá, ${nome}!</h1>
+                <p>Você foi convidado para fazer parte da nossa equipe como <strong>${cargoLabel}</strong>.</p>
+                <p>Para completar seu cadastro e criar sua senha, clique no botão abaixo:</p>
+                <p style="margin: 30px 0;">
+                  <a href="${emailActionLink}"
+                     style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                    Aceitar Convite e Criar Senha
+                  </a>
+                </p>
+                <p>Se você não solicitou este convite, pode ignorar este email.</p>
+                <p>Atenciosamente,<br>Equipe CRM</p>
+              `,
+            }),
+          });
 
-        const emailData = await emailResponse.json();
-        if (!emailResponse.ok) {
-          console.error("Erro ao enviar email Resend:", emailData);
+          const emailData = await emailResponse.json();
+          if (!emailResponse.ok) {
+            console.error("Erro ao enviar email Resend:", emailData);
+            emailStatus = 'failed';
+          } else {
+            console.info("Email enviado com sucesso:", emailData);
+            emailStatus = 'sent';
+            emailId = emailData.id;
+          }
+        } catch (e) {
+          console.error('Falha ao enviar email com Resend:', e);
           emailStatus = 'failed';
-        } else {
-          console.info("Email enviado com sucesso:", emailData);
-          emailStatus = 'sent';
-          emailId = emailData.id;
         }
-      } catch (e) {
-        console.error('Falha ao enviar email com Resend:', e);
-        emailStatus = 'failed';
+      } else {
+        console.info('RESEND_API_KEY ausente - pulando envio de email customizado');
+        emailStatus = 'not_configured';
       }
     } else {
-      console.info('RESEND_API_KEY ausente - pulando envio de email customizado');
-      emailStatus = 'not_configured';
+      // Novo usuário convidado via inviteUserByEmail - o Supabase envia o email padrão
+      emailStatus = 'system_sent';
     }
 
     return new Response(JSON.stringify({ 
