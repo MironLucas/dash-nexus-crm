@@ -97,11 +97,11 @@ const Usuarios = () => {
         throw inviteError;
       }
 
-      if (data?.success === false || data?.error || data?.code === 'email_exists') {
+      if (data?.success === false || data?.error) {
         toast({
           variant: "destructive",
           title: "Não foi possível enviar o convite",
-          description: data?.error || "Este email já está cadastrado no sistema.",
+          description: data?.error || "Erro ao processar convite.",
         });
         return;
       }
@@ -147,11 +147,11 @@ const Usuarios = () => {
         throw error;
       }
 
-      if (data?.success === false || data?.error || data?.code === 'email_exists') {
+      if (data?.success === false || data?.error) {
         toast({
           variant: "destructive",
           title: "Não foi possível reenviar",
-          description: data?.error || "Este email já está cadastrado no sistema.",
+          description: data?.error || "Erro ao processar convite.",
         });
         return;
       }

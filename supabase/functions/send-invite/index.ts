@@ -38,44 +38,107 @@ const handler = async (req: Request): Promise<Response> => {
       }
     );
 
-    // Criar usuário com convite
-    const { data: userData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-      email,
-      {
-        data: {
-          nome: nome,
-          cargo: cargo
-        },
-        redirectTo: `${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app')}/completar-cadastro`
+    // Construir URL do frontend corretamente
+    const origin = req.headers.get('origin') || req.headers.get('referer');
+    let frontendUrl = 'https://jckwavzrpyczdkbwxnqb.lovable.app';
+    
+    if (origin) {
+      try {
+        const url = new URL(origin);
+        frontendUrl = `${url.protocol}//${url.host}`;
+      } catch (e) {
+        console.warn('Não foi possível extrair URL do origin/referer:', e);
       }
-    );
-
-    if (inviteError) {
-      console.error("Erro ao criar convite:", inviteError);
-      // Se o usuário já existe, retornar 200 com payload amigável
-      if (inviteError.message?.includes('already been registered')) {
-        return new Response(
-          JSON.stringify({ success: false, code: 'email_exists', error: 'Este email já está cadastrado no sistema.' }),
-          { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
-        );
-      }
-      throw inviteError;
     }
+    
+    const redirectUrl = `${frontendUrl}/completar-cadastro`;
+    console.info("Redirect URL:", redirectUrl);
 
-    console.info("Usuário convidado:", userData.user?.id);
+    // Verificar se o usuário já existe
+    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+    const existingUser = existingUsers.users?.find(u => u.email === email);
 
-    // Inserir role do usuário
-    const { error: roleError } = await supabaseAdmin
-      .from('user_roles')
-      .insert({
-        user_id: userData.user?.id,
-        role: cargo
+    let userData;
+    
+    if (existingUser) {
+      // Usuário já existe - gerar novo link de convite
+      console.info("Usuário já existe, gerando novo link de convite");
+      
+      const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'invite',
+        email: email,
+        options: {
+          redirectTo: redirectUrl,
+          data: {
+            nome: nome,
+            cargo: cargo
+          }
+        }
       });
 
-    if (roleError) {
-      console.error("Erro ao inserir role:", roleError);
-      // Não falha a requisição, apenas loga o erro
+      if (linkError) {
+        console.error("Erro ao gerar link de convite:", linkError);
+        throw linkError;
+      }
+
+      userData = { user: existingUser };
+      
+      // Atualizar metadata do usuário existente
+      await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+        user_metadata: {
+          nome: nome,
+          cargo: cargo
+        }
+      });
+
+      // Atualizar role na tabela user_roles
+      const { error: roleError } = await supabaseAdmin
+        .from('user_roles')
+        .upsert({
+          user_id: existingUser.id,
+          role: cargo
+        }, {
+          onConflict: 'user_id,role'
+        });
+
+      if (roleError) {
+        console.error("Erro ao atualizar role:", roleError);
+      }
+
+    } else {
+      // Criar novo usuário com convite
+      const { data: newUserData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+        email,
+        {
+          data: {
+            nome: nome,
+            cargo: cargo
+          },
+          redirectTo: redirectUrl
+        }
+      );
+
+      if (inviteError) {
+        console.error("Erro ao criar convite:", inviteError);
+        throw inviteError;
+      }
+
+      userData = newUserData;
+      
+      // Inserir role do novo usuário
+      const { error: roleError } = await supabaseAdmin
+        .from('user_roles')
+        .insert({
+          user_id: newUserData.user?.id,
+          role: cargo
+        });
+
+      if (roleError) {
+        console.error("Erro ao inserir role:", roleError);
+      }
     }
+
+    console.info("Usuário processado:", userData.user?.id);
 
     // Enviar email customizado usando Resend API (opcional)
     const cargoLabel = cargo === 'admin' ? 'Administrador' : cargo === 'gerente' ? 'Gerente' : 'Vendedor';
@@ -101,7 +164,7 @@ const handler = async (req: Request): Promise<Response> => {
               <p>Você foi convidado para fazer parte da nossa equipe como <strong>${cargoLabel}</strong>.</p>
               <p>Para completar seu cadastro e criar sua senha, clique no link abaixo:</p>
               <p style="margin: 30px 0;">
-                <a href="${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app')}/completar-cadastro" 
+                <a href="${frontendUrl}/completar-cadastro" 
                    style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
                   Aceitar Convite e Criar Senha
                 </a>
