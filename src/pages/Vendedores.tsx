@@ -47,36 +47,31 @@ const Vendedores = () => {
 
   // Buscar usuários com role vendedor que ainda não estão vinculados
   const { data: availableUsers } = useQuery({
-    queryKey: ['available-users-vendedor'],
+    queryKey: ['available-users-vendedor', vendedores],
     queryFn: async () => {
-      // Primeiro buscar os IDs dos usuários com role vendedor
-      const { data: rolesData } = await supabase
-        .from('user_roles')
-        .select('user_id')
-        .eq('role', 'vendedor');
+      // Buscar todos os usuários do sistema via edge function
+      const { data: usersResponse, error } = await supabase.functions.invoke('list-users');
       
-      if (!rolesData || rolesData.length === 0) return [];
+      if (error || !usersResponse?.users) {
+        console.error('Erro ao buscar usuários:', error);
+        return [];
+      }
       
-      const userIds = rolesData.map(r => r.user_id);
-      
-      // Buscar os perfis desses usuários
-      const { data: profilesData } = await supabase
-        .from('profiles')
-        .select('id, nome')
-        .in('id', userIds);
-      
-      if (!profilesData) return [];
+      // Filtrar apenas usuários com role vendedor
+      const vendedorUsers = usersResponse.users.filter((user: any) => 
+        user.role === 'vendedor'
+      );
       
       // Filtrar usuários que já estão vinculados
       const linkedUserIds = vendedores
         ?.filter(v => v.user_id)
         .map(v => v.user_id) || [];
       
-      return profilesData
-        .filter(p => !linkedUserIds.includes(p.id))
-        .map(p => ({
-          id: p.id,
-          nome: p.nome || 'Sem nome'
+      return vendedorUsers
+        .filter((user: any) => !linkedUserIds.includes(user.id))
+        .map((user: any) => ({
+          id: user.id,
+          nome: user.user_metadata?.nome || user.email || 'Sem nome'
         }));
     },
     enabled: !!vendedores
