@@ -17,13 +17,13 @@ import {
 import { UserProfile } from "@/components/UserProfile";
 
 const allItems = [
-  { title: "Inicial", url: "/", icon: Home, allowedRoles: ["admin", "gerente"] },
+  { title: "Inicial", url: "/", icon: Home, allowedRoles: ["admin", "gerente", "vendedor"] },
   { title: "Produtos", url: "/produtos", icon: Package, allowedRoles: ["admin", "gerente"] },
   { title: "Pedidos", url: "/pedidos", icon: ShoppingCart, allowedRoles: ["admin", "gerente", "vendedor"] },
   { title: "Clientes", url: "/clientes", icon: Users, allowedRoles: ["admin", "gerente"] },
-  { title: "Vendedores", url: "/vendedores", icon: UserCircle, allowedRoles: ["admin", "gerente", "vendedor"] },
-  { title: "Usuários", url: "/usuarios", icon: Shield, allowedRoles: ["admin", "gerente"] },
-  { title: "Configurações", url: "/configuracoes", icon: Settings, allowedRoles: ["admin", "gerente", "vendedor"] },
+  { title: "Vendedores", url: "/vendedores", icon: UserCircle, allowedRoles: ["admin", "gerente"] },
+  { title: "Usuários", url: "/usuarios", icon: Shield, allowedRoles: ["admin"] },
+  { title: "Configurações", url: "/configuracoes", icon: Settings, allowedRoles: ["admin"] },
 ];
 
 export function AppSidebar() {

@@ -12,7 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, subDays, isWithinInterval } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
 
@@ -22,17 +22,63 @@ const Pedidos = () => {
   const [statusFilter, setStatusFilter] = useState("todos");
   const [periodFilter, setPeriodFilter] = useState("todos");
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [vendedorId, setVendedorId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+        
+        // Buscar role do usuário
+        const { data: roleData } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (roleData) {
+          setUserRole(roleData.role);
+          
+          // Se for vendedor, buscar o ID do vendedor vinculado
+          if (roleData.role === 'vendedor') {
+            const { data: vendedorData, error: vendedorError } = await supabase
+              .from('vendedores' as any)
+              .select('vendedor')
+              .eq('user_id', user.id)
+              .maybeSingle();
+            
+            if (!vendedorError && vendedorData) {
+              setVendedorId((vendedorData as any).vendedor);
+            }
+          }
+        }
+      }
+    };
+
+    fetchUserData();
+  }, []);
   
   const { data: orders, isLoading } = useQuery({
-    queryKey: ['orders'],
+    queryKey: ['orders', vendedorId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('orders' as any)
         .select('*, customers(*), vendedores(nomevendedor)')
         .order('data_pedido', { ascending: false });
+      
+      // Se for vendedor, filtrar apenas seus pedidos
+      if (userRole === 'vendedor' && vendedorId) {
+        query = query.eq('vendedor', vendedorId);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return data as any[];
-    }
+    },
+    enabled: userRole !== 'vendedor' || (userRole === 'vendedor' && vendedorId !== null)
   });
 
   const filteredOrders = useMemo(() => {

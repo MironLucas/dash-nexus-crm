@@ -1,22 +1,103 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { useQuery } from "@tanstack/react-query";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { DollarSign, ShoppingCart, TrendingUp, Search } from "lucide-react";
+import { DollarSign, ShoppingCart, TrendingUp, Search, Link as LinkIcon } from "lucide-react";
 import { useState, useMemo } from "react";
+import { toast } from "sonner";
 
 const Vendedores = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const queryClient = useQueryClient();
   
   const { data: vendedores, isLoading } = useQuery({
     queryKey: ['vendedores'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('vendedores' as any)
-        .select('*');
+        .select('*, profiles!vendedores_user_id_fkey(nome)');
       if (error) throw error;
       return data as any[];
+    }
+  });
+
+  // Buscar usuários com role vendedor que ainda não estão vinculados
+  const { data: availableUsers } = useQuery({
+    queryKey: ['available-users-vendedor'],
+    queryFn: async () => {
+      // Primeiro buscar os IDs dos usuários com role vendedor
+      const { data: rolesData } = await supabase
+        .from('user_roles')
+        .select('user_id')
+        .eq('role', 'vendedor');
+      
+      if (!rolesData || rolesData.length === 0) return [];
+      
+      const userIds = rolesData.map(r => r.user_id);
+      
+      // Buscar os perfis desses usuários
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, nome')
+        .in('id', userIds);
+      
+      if (!profilesData) return [];
+      
+      // Filtrar usuários que já estão vinculados
+      const linkedUserIds = vendedores
+        ?.filter(v => v.user_id)
+        .map(v => v.user_id) || [];
+      
+      return profilesData
+        .filter(p => !linkedUserIds.includes(p.id))
+        .map(p => ({
+          id: p.id,
+          nome: p.nome || 'Sem nome'
+        }));
+    },
+    enabled: !!vendedores
+  });
+
+  const linkUserMutation = useMutation({
+    mutationFn: async ({ vendedorId, userId }: { vendedorId: number; userId: string }) => {
+      const { error } = await supabase
+        .from('vendedores' as any)
+        .update({ user_id: userId })
+        .eq('vendedor', vendedorId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vendedores'] });
+      queryClient.invalidateQueries({ queryKey: ['available-users-vendedor'] });
+      toast.success('Usuário vinculado com sucesso!');
+    },
+    onError: (error) => {
+      console.error('Erro ao vincular usuário:', error);
+      toast.error('Erro ao vincular usuário');
+    }
+  });
+
+  const unlinkUserMutation = useMutation({
+    mutationFn: async (vendedorId: number) => {
+      const { error } = await supabase
+        .from('vendedores' as any)
+        .update({ user_id: null })
+        .eq('vendedor', vendedorId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vendedores'] });
+      queryClient.invalidateQueries({ queryKey: ['available-users-vendedor'] });
+      toast.success('Vínculo removido com sucesso!');
+    },
+    onError: (error) => {
+      console.error('Erro ao remover vínculo:', error);
+      toast.error('Erro ao remover vínculo');
     }
   });
 
@@ -136,9 +217,11 @@ const Vendedores = () => {
                 <TableRow>
                   <TableHead>ID</TableHead>
                   <TableHead>Nome</TableHead>
+                  <TableHead>Usuário Vinculado</TableHead>
                   <TableHead>Pedidos</TableHead>
                   <TableHead>Total Vendido</TableHead>
                   <TableHead>Ticket Médio</TableHead>
+                  <TableHead>Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -155,12 +238,61 @@ const Vendedores = () => {
                     <TableRow key={vendedor.vendedor}>
                       <TableCell className="font-medium">{vendedor.vendedor}</TableCell>
                       <TableCell>{vendedor.nomevendedor}</TableCell>
+                      <TableCell>
+                        {vendedor.user_id ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm">{vendedor.profiles?.nome || 'Usuário vinculado'}</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => unlinkUserMutation.mutate(vendedor.vendedor)}
+                              disabled={unlinkUserMutation.isPending}
+                            >
+                              Desvincular
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Select
+                              onValueChange={(userId) => 
+                                linkUserMutation.mutate({ 
+                                  vendedorId: vendedor.vendedor, 
+                                  userId 
+                                })
+                              }
+                              disabled={linkUserMutation.isPending || !availableUsers?.length}
+                            >
+                              <SelectTrigger className="w-[200px]">
+                                <SelectValue placeholder="Vincular usuário" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {availableUsers?.map((user) => (
+                                  <SelectItem key={user.id} value={user.id}>
+                                    {user.nome}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell>{stats.quantidadePedidos}</TableCell>
                       <TableCell>
                         R$ {Number(stats.valorTotal).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell>
                         R$ {Number(ticketMedioVendedor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          disabled={!vendedor.user_id}
+                          title={vendedor.user_id ? "Usuário vinculado" : "Vincule um usuário primeiro"}
+                        >
+                          <LinkIcon className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   );

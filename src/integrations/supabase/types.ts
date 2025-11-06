@@ -296,14 +296,17 @@ export type Database = {
       vendedores: {
         Row: {
           nomevendedor: string | null
+          user_id: string | null
           vendedor: number
         }
         Insert: {
           nomevendedor?: string | null
+          user_id?: string | null
           vendedor: number
         }
         Update: {
           nomevendedor?: string | null
+          user_id?: string | null
           vendedor?: number
         }
         Relationships: []
