@@ -18,8 +18,29 @@ const Vendedores = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('vendedores' as any)
-        .select('*, profiles!vendedores_user_id_fkey(nome)');
+        .select('*');
       if (error) throw error;
+      
+      // Buscar os perfis dos usuários vinculados separadamente
+      if (data && data.length > 0) {
+        const userIds = data
+          .filter((v: any) => v.user_id)
+          .map((v: any) => v.user_id);
+        
+        if (userIds.length > 0) {
+          const { data: profilesData } = await supabase
+            .from('profiles')
+            .select('id, nome')
+            .in('id', userIds);
+          
+          // Mapear os perfis aos vendedores
+          return data.map((vendedor: any) => ({
+            ...vendedor,
+            profile_nome: profilesData?.find((p: any) => p.id === vendedor.user_id)?.nome
+          }));
+        }
+      }
+      
       return data as any[];
     }
   });
@@ -241,7 +262,7 @@ const Vendedores = () => {
                       <TableCell>
                         {vendedor.user_id ? (
                           <div className="flex items-center gap-2">
-                            <span className="text-sm">{vendedor.profiles?.nome || 'Usuário vinculado'}</span>
+                            <span className="text-sm">{vendedor.profile_nome || 'Usuário vinculado'}</span>
                             <Button
                               variant="ghost"
                               size="sm"
