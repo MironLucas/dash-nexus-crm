@@ -85,7 +85,7 @@ const Campanha = () => {
         .single();
       
       if (error) throw error;
-      return data;
+      return data as any;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campanhas'] });
@@ -145,7 +145,7 @@ const Campanha = () => {
       return;
     }
 
-    const campanha = await criarCampanhaMutation.mutateAsync();
+    const campanha: any = await criarCampanhaMutation.mutateAsync();
     
     if (clientesSelecionados.length > 0) {
       await vincularClientesMutation.mutateAsync(campanha.id);

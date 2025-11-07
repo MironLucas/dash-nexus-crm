@@ -14,6 +14,120 @@ export type Database = {
   }
   public: {
     Tables: {
+      campanha_clientes: {
+        Row: {
+          campanha_id: string
+          cliente_id: number
+          created_at: string
+          id: string
+          status: Database["public"]["Enums"]["status_campanha"]
+          updated_at: string
+        }
+        Insert: {
+          campanha_id: string
+          cliente_id: number
+          created_at?: string
+          id?: string
+          status?: Database["public"]["Enums"]["status_campanha"]
+          updated_at?: string
+        }
+        Update: {
+          campanha_id?: string
+          cliente_id?: number
+          created_at?: string
+          id?: string
+          status?: Database["public"]["Enums"]["status_campanha"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campanha_clientes_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_clientes_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id_client"]
+          },
+        ]
+      }
+      campanha_vendedores: {
+        Row: {
+          campanha_id: string
+          created_at: string
+          id: string
+          vendedor_id: number
+        }
+        Insert: {
+          campanha_id: string
+          created_at?: string
+          id?: string
+          vendedor_id: number
+        }
+        Update: {
+          campanha_id?: string
+          created_at?: string
+          id?: string
+          vendedor_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campanha_vendedores_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_vendedores_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["vendedor"]
+          },
+        ]
+      }
+      campanhas: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          created_by: string | null
+          criterios: Json | null
+          descricao: string | null
+          id: string
+          nome: string
+          tipo: Database["public"]["Enums"]["tipo_campanha"]
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          created_by?: string | null
+          criterios?: Json | null
+          descricao?: string | null
+          id?: string
+          nome: string
+          tipo?: Database["public"]["Enums"]["tipo_campanha"]
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          created_by?: string | null
+          criterios?: Json | null
+          descricao?: string | null
+          id?: string
+          nome?: string
+          tipo?: Database["public"]["Enums"]["tipo_campanha"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       customers: {
         Row: {
           aniversario: string | null
@@ -326,6 +440,8 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "gerente" | "vendedor"
+      status_campanha: "pendente" | "contatado" | "convertido"
+      tipo_campanha: "aniversario" | "produto" | "custom"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -454,6 +570,8 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "gerente", "vendedor"],
+      status_campanha: ["pendente", "contatado", "convertido"],
+      tipo_campanha: ["aniversario", "produto", "custom"],
     },
   },
 } as const

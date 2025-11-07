@@ -27,7 +27,7 @@ const Contato = () => {
           .maybeSingle();
         
         if (vendedorData) {
-          setVendedorId(vendedorData.vendedor);
+          setVendedorId((vendedorData as any).vendedor);
         }
       }
     };
