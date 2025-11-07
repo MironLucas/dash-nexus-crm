@@ -5,12 +5,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { DollarSign, ShoppingCart, TrendingUp, Search, Link as LinkIcon } from "lucide-react";
+import { DollarSign, ShoppingCart, TrendingUp, Search, Link as LinkIcon, Calendar } from "lucide-react";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
+import { format, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
 
 const Vendedores = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [vendedorFilter, setVendedorFilter] = useState<string>("all");
+  const [periodoFilter, setPeriodoFilter] = useState<string>("all");
   const queryClient = useQueryClient();
   
   const { data: vendedores, isLoading } = useQuery({
@@ -118,11 +121,31 @@ const Vendedores = () => {
   });
 
   const { data: salesByVendedor } = useQuery({
-    queryKey: ['sales-by-vendedor'],
+    queryKey: ['sales-by-vendedor', periodoFilter],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('orders' as any)
-        .select('vendedor, valor_final, id_order');
+        .select('vendedor, valor_final, id_order, data_pedido');
+      
+      // Aplicar filtro de período
+      const now = new Date();
+      if (periodoFilter === 'hoje') {
+        query = query.gte('data_pedido', format(now, 'yyyy-MM-dd'));
+      } else if (periodoFilter === '7dias') {
+        query = query.gte('data_pedido', format(subDays(now, 7), 'yyyy-MM-dd'));
+      } else if (periodoFilter === '30dias') {
+        query = query.gte('data_pedido', format(subDays(now, 30), 'yyyy-MM-dd'));
+      } else if (periodoFilter === 'mes') {
+        query = query
+          .gte('data_pedido', format(startOfMonth(now), 'yyyy-MM-dd'))
+          .lte('data_pedido', format(endOfMonth(now), 'yyyy-MM-dd'));
+      } else if (periodoFilter === 'ano') {
+        query = query
+          .gte('data_pedido', format(startOfYear(now), 'yyyy-MM-dd'))
+          .lte('data_pedido', format(endOfYear(now), 'yyyy-MM-dd'));
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       
       const salesMap = (data as any[]).reduce((acc, order) => {
@@ -147,10 +170,14 @@ const Vendedores = () => {
     if (!vendedores) return [];
     
     return vendedores.filter(vendedor => {
-      return vendedor.nomevendedor?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      const matchesSearch = vendedor.nomevendedor?.toLowerCase().includes(searchTerm.toLowerCase()) ||
              vendedor.vendedor?.toString().includes(searchTerm);
+      
+      const matchesVendedor = vendedorFilter === "all" || vendedor.vendedor?.toString() === vendedorFilter;
+      
+      return matchesSearch && matchesVendedor;
     });
-  }, [vendedores, searchTerm]);
+  }, [vendedores, searchTerm, vendedorFilter]);
 
   const totalVendas = salesByVendedor 
     ? (Object.values(salesByVendedor).reduce((sum: number, v: any) => sum + v.valorTotal, 0) as number)
@@ -208,8 +235,8 @@ const Vendedores = () => {
       <Card>
         <CardHeader>
           <CardTitle>Performance por Vendedor</CardTitle>
-          <div className="flex gap-4 mt-4">
-            <div className="relative flex-1">
+          <div className="flex gap-4 mt-4 flex-wrap">
+            <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar por nome ou ID..."
@@ -218,6 +245,32 @@ const Vendedores = () => {
                 className="pl-10"
               />
             </div>
+            <Select value={vendedorFilter} onValueChange={setVendedorFilter}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Todos os vendedores" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os vendedores</SelectItem>
+                {vendedores?.map((v: any) => (
+                  <SelectItem key={v.vendedor} value={v.vendedor.toString()}>
+                    {v.nomevendedor}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={periodoFilter} onValueChange={setPeriodoFilter}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Todos os períodos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os períodos</SelectItem>
+                <SelectItem value="hoje">Hoje</SelectItem>
+                <SelectItem value="7dias">Últimos 7 dias</SelectItem>
+                <SelectItem value="30dias">Últimos 30 dias</SelectItem>
+                <SelectItem value="mes">Este mês</SelectItem>
+                <SelectItem value="ano">Este ano</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardHeader>
         <CardContent>
