@@ -57,9 +57,7 @@ export function AppSidebar() {
     fetchUserRole();
   }, []);
 
-  const items = allItems.filter(item => 
-    !userRole || item.allowedRoles.includes(userRole)
-  );
+  const items = userRole ? allItems.filter(item => item.allowedRoles.includes(userRole)) : [];
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">

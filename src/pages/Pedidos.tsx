@@ -62,7 +62,7 @@ const Pedidos = () => {
   }, []);
   
   const { data: orders, isLoading } = useQuery({
-    queryKey: ['orders', vendedorId],
+    queryKey: ['orders', userRole, vendedorId],
     queryFn: async () => {
       let query = supabase
         .from('orders' as any)

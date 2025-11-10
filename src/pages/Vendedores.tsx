@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DollarSign, ShoppingCart, TrendingUp, Search, Link as LinkIcon, Calendar } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { format, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
 
@@ -15,6 +15,23 @@ const Vendedores = () => {
   const [vendedorFilter, setVendedorFilter] = useState<string>("all");
   const [periodoFilter, setPeriodoFilter] = useState<string>("all");
   const queryClient = useQueryClient();
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchRole = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: roleData } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        setUserRole(roleData?.role || null);
+      }
+    };
+    fetchRole();
+  }, []);
+
   
   const { data: vendedores, isLoading } = useQuery({
     queryKey: ['vendedores'],
@@ -188,6 +205,17 @@ const Vendedores = () => {
     : 0;
 
   const ticketMedio = totalPedidos > 0 ? (totalVendas / totalPedidos) : 0;
+
+  if (userRole === 'vendedor') {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Acesso restrito</h1>
+          <p className="text-muted-foreground">Você não tem permissão para acessar a página de Vendedores.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
