@@ -21,12 +21,8 @@ const Vendedores = () => {
     const fetchRole = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data: roleData } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        setUserRole(roleData?.role || null);
+        const { data: roleData, error: roleError } = await supabase.rpc('get_my_role');
+        if (!roleError) setUserRole((roleData as string) || null);
       }
     };
     fetchRole();

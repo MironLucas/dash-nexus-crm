@@ -12,12 +12,8 @@ const Configuracoes = () => {
     const loadRole = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data: roleData } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        setRole(roleData?.role || null);
+        const { data: roleData, error: roleError } = await supabase.rpc('get_my_role');
+        setRole(!roleError ? ((roleData as string) || null) : null);
       }
     };
     loadRole();

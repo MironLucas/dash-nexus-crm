@@ -17,7 +17,7 @@ const ResetPassword = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
-    // Verificar se há um hash de recuperação na URL
+    // Verificar se há um hash de recuperação na URL e hidratar sessão
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
     const accessToken = hashParams.get('access_token');
     const type = hashParams.get('type');
@@ -29,7 +29,14 @@ const ResetPassword = () => {
         variant: "destructive",
       });
       navigate("/login");
+      return;
     }
+
+    // Garantir que a sessão seja atualizada a partir do hash
+    supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: hashParams.get('refresh_token') || "",
+    }).catch(() => {});
   }, [navigate, toast]);
 
   const handleResetPassword = async (e: React.FormEvent) => {

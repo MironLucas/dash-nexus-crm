@@ -25,10 +25,7 @@ const handler = async (req: Request): Promise<Response> => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     
-    if (!RESEND_API_KEY) {
-      throw new Error("RESEND_API_KEY não configurada");
-    }
-
+    // RESEND_API_KEY opcional: se não houver, apenas retornamos o link
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error("Credenciais do Supabase não configuradas");
     }
@@ -69,47 +66,59 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Link de reset gerado com sucesso");
 
-    // Enviar email via Resend
-    const emailResponse = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${RESEND_API_KEY}`,
-      },
-      body: JSON.stringify({
-        from: "onboarding@resend.dev",
-        to: [email],
-        subject: "Redefinição de Senha - CRM",
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h1 style="color: #333;">Redefinição de Senha</h1>
-            <p>Você solicitou a redefinição de senha para sua conta.</p>
-            <p>Para redefinir sua senha, clique no botão abaixo:</p>
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${data.properties.action_link}" 
-                 style="background-color: #4CAF50; color: white; padding: 14px 28px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                Redefinir Senha
-              </a>
+    let emailResult: any = null;
+    let emailOk = false;
+    let emailWarning: string | undefined;
+
+    if (RESEND_API_KEY) {
+      const emailResponse = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${RESEND_API_KEY}`,
+        },
+        body: JSON.stringify({
+          from: "onboarding@resend.dev",
+          to: [email],
+          subject: "Redefinição de Senha - CRM",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h1 style="color: #333;">Redefinição de Senha</h1>
+              <p>Você solicitou a redefinição de senha para sua conta.</p>
+              <p>Para redefinir sua senha, clique no botão abaixo:</p>
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${data.properties.action_link}" 
+                   style="background-color: #4CAF50; color: white; padding: 14px 28px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                  Redefinir Senha
+                </a>
+              </div>
+              <p style="color: #666; font-size: 12px; margin-top: 30px;">
+                Se você não solicitou esta redefinição, pode ignorar este email com segurança.
+                Este link expira em 24 horas.
+              </p>
             </div>
-            <p style="color: #666; font-size: 12px; margin-top: 30px;">
-              Se você não solicitou esta redefinição, pode ignorar este email com segurança.
-              Este link expira em 24 horas.
-            </p>
-          </div>
-        `,
-      }),
-    });
+          `,
+        }),
+      });
 
-    const emailData = await emailResponse.json();
-
-    if (!emailResponse.ok) {
-      console.error("Erro ao enviar email:", emailData);
-      throw new Error(emailData.message || "Erro ao enviar email");
+      emailResult = await emailResponse.json();
+      emailOk = emailResponse.ok;
+      if (!emailOk) {
+        console.error("Erro ao enviar email:", emailResult);
+        emailWarning = emailResult.message || "Falha ao enviar email. Use o link retornado para redefinir a senha.";
+      } else {
+        console.log("Email de reset enviado com sucesso:", emailResult);
+      }
+    } else {
+      emailWarning = "RESEND_API_KEY ausente; retornando link de redefinição na resposta.";
     }
 
-    console.log("Email de reset enviado com sucesso:", emailData);
-
-    return new Response(JSON.stringify({ success: true, data: emailData }), {
+    return new Response(JSON.stringify({ 
+      success: true, 
+      email_sent: emailOk, 
+      warning: emailWarning, 
+      action_link: data.properties.action_link 
+    }), {
       status: 200,
       headers: {
         "Content-Type": "application/json",

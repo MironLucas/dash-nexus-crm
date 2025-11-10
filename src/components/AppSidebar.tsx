@@ -39,13 +39,9 @@ export function AppSidebar() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          const { data: roleData } = await supabase
-            .from('user_roles')
-            .select('role')
-            .eq('user_id', user.id)
-            .maybeSingle();
-          
-          setUserRole(roleData?.role || null);
+          const { data: roleData, error: roleError } = await supabase.rpc('get_my_role');
+          if (roleError) throw roleError;
+          setUserRole(roleData || null);
         }
       } catch (error) {
         console.error("Erro ao buscar role do usuário:", error);

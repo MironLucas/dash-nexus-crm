@@ -32,24 +32,18 @@ const Pedidos = () => {
       if (user) {
         setUserId(user.id);
         
-        // Buscar role do usuário
-        const { data: roleData } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .single();
-        
-        if (roleData) {
-          setUserRole(roleData.role);
-          
+        const { data: roleData, error: roleError } = await supabase.rpc('get_my_role');
+        if (!roleError && roleData) {
+          setUserRole(roleData as string);
+
           // Se for vendedor, buscar o ID do vendedor vinculado
-          if (roleData.role === 'vendedor') {
+          if (roleData === 'vendedor') {
             const { data: vendedorData, error: vendedorError } = await supabase
               .from('vendedores' as any)
               .select('vendedor')
               .eq('user_id', user.id)
               .maybeSingle();
-            
+
             if (!vendedorError && vendedorData) {
               setVendedorId((vendedorData as any).vendedor);
             }

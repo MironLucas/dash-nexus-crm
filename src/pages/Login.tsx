@@ -75,7 +75,7 @@ const Login = () => {
     setResetLoading(true);
 
     try {
-      const { error } = await supabase.functions.invoke("send-password-reset", {
+      const { data, error } = await supabase.functions.invoke("send-password-reset", {
         body: { email: resetEmail },
       });
 
@@ -86,10 +86,21 @@ const Login = () => {
           variant: "destructive",
         });
       } else {
+        const msg = data?.email_sent
+          ? "Verifique sua caixa de entrada para redefinir sua senha."
+          : "Não foi possível enviar o email automaticamente. Use o link exibido para redefinir sua senha.";
         toast({
-          title: "Email enviado!",
-          description: "Verifique sua caixa de entrada para redefinir sua senha.",
+          title: "Solicitação registrada",
+          description: msg,
         });
+        // Se a função retornou um link de ação, mostramos para o admin copiar
+        if (data?.action_link) {
+          navigator.clipboard?.writeText(data.action_link).catch(() => {});
+          toast({
+            title: "Link copiado",
+            description: "O link de redefinição foi copiado para a área de transferência.",
+          });
+        }
         setIsResetDialogOpen(false);
         setResetEmail("");
       }
