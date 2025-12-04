@@ -135,7 +135,14 @@ ${contextData}`,
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Erro OpenAI:", response.status, errorText);
-      throw new Error(`Erro na API OpenAI: ${response.status}`);
+      // Retorna o payload mesmo com erro
+      return new Response(JSON.stringify({ 
+        error: `Erro na API OpenAI: ${response.status}`,
+        debug_payload: openaiPayload 
+      }), {
+        status: 200, // Retorna 200 para o frontend conseguir ler o debug_payload
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const data = await response.json();

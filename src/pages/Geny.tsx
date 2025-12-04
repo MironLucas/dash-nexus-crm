@@ -54,11 +54,21 @@ const Geny = () => {
         body: { message: input.trim() },
       });
 
+      // Sempre salvar o payload para debug, mesmo com erro
+      if (data?.debug_payload) {
+        setLastPayload(data.debug_payload);
+      }
+
       if (error) throw error;
 
-      // Salvar o payload para debug
-      if (data.debug_payload) {
-        setLastPayload(data.debug_payload);
+      // Se há erro da OpenAI mas temos o payload
+      if (data?.error) {
+        toast({
+          title: "Erro da API",
+          description: data.error,
+          variant: "destructive",
+        });
+        return;
       }
 
       const assistantMessage: Message = {
