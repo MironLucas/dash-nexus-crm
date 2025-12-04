@@ -2,8 +2,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { CheckCircle, Key } from "lucide-react";
 
 const Configuracoes = () => {
   const [role, setRole] = useState<string | null>(null);
@@ -56,6 +58,32 @@ const Configuracoes = () => {
               <Input id="phone" placeholder="(00) 0000-0000" />
             </div>
             <Button>Salvar Alterações</Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Key className="h-5 w-5" />
+              Chave API IA (Geny)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              A chave da API do ChatGPT é usada para alimentar a assistente Geny.
+            </p>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <CheckCircle className="h-3 w-3 text-green-500" />
+                Configurada
+              </Badge>
+              <span className="text-sm text-muted-foreground">
+                A chave está armazenada de forma segura no servidor.
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Para alterar a chave, acesse as configurações de secrets do Supabase.
+            </p>
           </CardContent>
         </Card>
 

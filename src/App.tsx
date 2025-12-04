@@ -11,6 +11,7 @@ import Clientes from "./pages/Clientes";
 import Vendedores from "./pages/Vendedores";
 import Contato from "./pages/Contato";
 import Campanha from "./pages/Campanha";
+import Geny from "./pages/Geny";
 import Configuracoes from "./pages/Configuracoes";
 import Usuarios from "./pages/Usuarios";
 import Login from "./pages/Login";
@@ -37,6 +38,7 @@ const App = () => (
           <Route element={<Layout><Vendedores /></Layout>} path="/vendedores" />
           <Route element={<Layout><Contato /></Layout>} path="/contato" />
           <Route element={<Layout><Campanha /></Layout>} path="/campanha" />
+          <Route element={<Layout><Geny /></Layout>} path="/geny" />
           <Route element={<Layout><Usuarios /></Layout>} path="/usuarios" />
           <Route element={<Layout><Configuracoes /></Layout>} path="/configuracoes" />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
