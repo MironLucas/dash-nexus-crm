@@ -97,18 +97,12 @@ ${produtosInfo.slice(0, 10).map((p) => `- ${p.titulo}: R$ ${p.preco?.toFixed(2) 
 
     console.log("Contexto preparado, enviando para OpenAI...");
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openaiApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: `Você é a Geny, uma assistente de IA integrada ao CRM. Você ajuda os usuários a entender dados de vendas, pedidos, clientes e performance.
+    const openaiPayload = {
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `Você é a Geny, uma assistente de IA integrada ao CRM. Você ajuda os usuários a entender dados de vendas, pedidos, clientes e performance.
 
 Suas características:
 - Seja sempre educada e profissional
@@ -119,15 +113,23 @@ Suas características:
 - Seja concisa mas completa nas respostas
 
 ${contextData}`,
-          },
-          {
-            role: "user",
-            content: message,
-          },
-        ],
-        temperature: 0.7,
-        max_tokens: 1000,
-      }),
+        },
+        {
+          role: "user",
+          content: message,
+        },
+      ],
+      temperature: 0.7,
+      max_tokens: 1000,
+    };
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openaiApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(openaiPayload),
     });
 
     if (!response.ok) {
@@ -141,7 +143,10 @@ ${contextData}`,
 
     console.log("Resposta da IA:", aiResponse.substring(0, 100) + "...");
 
-    return new Response(JSON.stringify({ response: aiResponse }), {
+    return new Response(JSON.stringify({ 
+      response: aiResponse,
+      debug_payload: openaiPayload 
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: unknown) {

@@ -25,6 +25,7 @@ const Geny = () => {
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [lastPayload, setLastPayload] = useState<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -54,6 +55,11 @@ const Geny = () => {
       });
 
       if (error) throw error;
+
+      // Salvar o payload para debug
+      if (data.debug_payload) {
+        setLastPayload(data.debug_payload);
+      }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -174,6 +180,16 @@ const Geny = () => {
           </p>
         </div>
       </Card>
+
+      {/* Debug: JSON Payload */}
+      {lastPayload && (
+        <Card className="mt-4 p-4">
+          <h3 className="text-sm font-semibold mb-2">Debug: JSON enviado ao ChatGPT</h3>
+          <pre className="text-xs bg-muted p-3 rounded overflow-auto max-h-96 whitespace-pre-wrap">
+            {JSON.stringify(lastPayload, null, 2)}
+          </pre>
+        </Card>
+      )}
     </div>
   );
 };
