@@ -7,6 +7,73 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Schema do banco para o prompt
+const DATABASE_SCHEMA = `
+Você é um assistente de IA especializado em gerar consultas SQL para um CRM.
+
+SCHEMA DO BANCO DE DADOS:
+
+Tabela: orders
+- id_order (bigint, PK)
+- id_client (bigint, FK para customers)
+- vendedor (bigint, FK para vendedores)
+- data_pedido (timestamp with time zone)
+- status (varchar) - valores possíveis: 'pago', 'finalizado', 'pendente', 'cancelado'
+- valor_total (numeric)
+- valor_desconto (bigint)
+- valor_final (numeric)
+- taxa_entrega (numeric)
+- canal_venda (varchar)
+- transportadora (varchar)
+
+Tabela: customers
+- id_client (bigint, PK)
+- nome_completo (varchar)
+- email (varchar)
+- telefone (varchar)
+- document (varchar) - CPF/CNPJ
+- aniversario (date)
+- genero (varchar)
+- logadouro, numero, complemento, bairro, cidade, estado, cep (varchar) - endereço
+
+Tabela: products
+- id_product (bigint, PK)
+- titulo (varchar)
+- descricao (varchar)
+- sku (varchar)
+- categoria (varchar)
+- preco (numeric)
+- estoque (varchar)
+- ativo (varchar)
+
+Tabela: itens (itens dos pedidos)
+- id_itens (bigint, PK)
+- id_order (bigint, FK para orders)
+- id_product (bigint, FK para products)
+- product_total (numeric)
+- product_desc (numeric)
+- product_final (numeric)
+- variante1, variante2 (varchar)
+
+Tabela: vendedores
+- vendedor (bigint, PK)
+- nomevendedor (varchar)
+
+REGRAS:
+1. Sempre retorne um JSON válido com as chaves "sql" e "explicacao"
+2. A query SQL deve ser compatível com PostgreSQL
+3. Use apenas SELECT, nunca INSERT, UPDATE, DELETE ou DROP
+4. Para faturamento, use valor_final da tabela orders
+5. Para pedidos pagos/finalizados, filtre por status IN ('pago', 'finalizado')
+6. Use DATE_TRUNC para agrupar por período
+7. Use COALESCE para evitar NULL em somas
+8. Na explicacao, use {{valor}} onde o resultado da query deve aparecer
+9. Se a pergunta não for relacionada ao CRM, retorne uma mensagem educada
+
+Exemplo de resposta:
+{"sql":"SELECT COALESCE(SUM(valor_final), 0) AS resultado FROM orders WHERE DATE_TRUNC('month', data_pedido) = DATE_TRUNC('month', CURRENT_DATE)","explicacao":"O faturamento deste mês é de R$ {{valor}}."}
+`;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -25,105 +92,27 @@ serve(async (req) => {
     const { message } = await req.json();
     console.log("Mensagem recebida:", message);
 
-    // Buscar dados do CRM para contexto
-    const [ordersResult, customersResult, productsResult, vendedoresResult] = await Promise.all([
-      supabase.from("orders").select("*").order("data_pedido", { ascending: false }).limit(100),
-      supabase.from("customers").select("*").limit(100),
-      supabase.from("products").select("*").limit(100),
-      supabase.from("vendedores").select("*"),
-    ]);
-
-    // Calcular estatísticas
-    const orders = ordersResult.data || [];
-    const customers = customersResult.data || [];
-    const products = productsResult.data || [];
-    const vendedores = vendedoresResult.data || [];
-
-    const hoje = new Date().toISOString().split("T")[0];
-    const pedidosHoje = orders.filter((o) => o.data_pedido?.startsWith(hoje));
-    const faturamentoHoje = pedidosHoje.reduce((acc, o) => acc + (o.valor_final || 0), 0);
-    
-    const mesAtual = new Date().toISOString().slice(0, 7);
-    const pedidosMes = orders.filter((o) => o.data_pedido?.startsWith(mesAtual));
-    const faturamentoMes = pedidosMes.reduce((acc, o) => acc + (o.valor_final || 0), 0);
-
-    const faturamentoTotal = orders.reduce((acc, o) => acc + (o.valor_final || 0), 0);
-
-    // Estatísticas por vendedor
-    const estatisticasVendedores = vendedores.map((v) => {
-      const pedidosVendedor = orders.filter((o) => o.vendedor === v.vendedor);
-      const faturamento = pedidosVendedor.reduce((acc, o) => acc + (o.valor_final || 0), 0);
-      return {
-        nome: v.nomevendedor,
-        id: v.vendedor,
-        totalPedidos: pedidosVendedor.length,
-        faturamento,
-      };
-    });
-
-    // Produtos mais vendidos (simplificado)
-    const produtosInfo = products.map((p) => ({
-      titulo: p.titulo,
-      preco: p.preco,
-      categoria: p.categoria,
-      estoque: p.estoque,
-    }));
-
-    const contextData = `
-DADOS DO CRM (Atualizado em ${new Date().toLocaleString("pt-BR")}):
-
-RESUMO GERAL:
-- Total de pedidos: ${orders.length}
-- Total de clientes: ${customers.length}
-- Total de produtos: ${products.length}
-- Total de vendedores: ${vendedores.length}
-
-FATURAMENTO:
-- Faturamento hoje (${hoje}): R$ ${faturamentoHoje.toFixed(2)}
-- Pedidos hoje: ${pedidosHoje.length}
-- Faturamento do mês (${mesAtual}): R$ ${faturamentoMes.toFixed(2)}
-- Pedidos do mês: ${pedidosMes.length}
-- Faturamento total: R$ ${faturamentoTotal.toFixed(2)}
-
-VENDEDORES E PERFORMANCE:
-${estatisticasVendedores.map((v) => `- ${v.nome || "Vendedor " + v.id}: ${v.totalPedidos} pedidos, R$ ${v.faturamento.toFixed(2)}`).join("\n")}
-
-ÚLTIMOS 5 PEDIDOS:
-${orders.slice(0, 5).map((o) => `- Pedido #${o.id_order}: R$ ${o.valor_final?.toFixed(2) || "0.00"} - ${o.status || "N/A"} - ${o.data_pedido || "Sem data"}`).join("\n")}
-
-PRODUTOS CADASTRADOS (amostra):
-${produtosInfo.slice(0, 10).map((p) => `- ${p.titulo}: R$ ${p.preco?.toFixed(2) || "0.00"} (${p.categoria || "Sem categoria"})`).join("\n")}
-`;
-
-    console.log("Contexto preparado, enviando para OpenAI...");
-
+    // Passo 1: Enviar para o ChatGPT para gerar o SQL
     const openaiPayload = {
       model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content: `Você é a Geny, uma assistente de IA integrada ao CRM. Você ajuda os usuários a entender dados de vendas, pedidos, clientes e performance.
-
-Suas características:
-- Seja sempre educada e profissional
-- Responda em português brasileiro
-- Use os dados fornecidos para responder perguntas
-- Formate valores monetários em Reais (R$)
-- Se não souber algo específico, diga que não tem essa informação disponível
-- Seja concisa mas completa nas respostas
-
-${contextData}`,
+          content: DATABASE_SCHEMA,
         },
         {
           role: "user",
           content: message,
         },
       ],
-      temperature: 0.7,
-      max_tokens: 1000,
+      temperature: 0.3,
+      max_tokens: 500,
+      response_format: { type: "json_object" },
     };
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    console.log("Enviando para OpenAI...");
+    
+    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${openaiApiKey}`,
@@ -132,30 +121,111 @@ ${contextData}`,
       body: JSON.stringify(openaiPayload),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Erro OpenAI:", response.status, errorText);
-      // Retorna o payload mesmo com erro
+    if (!openaiResponse.ok) {
+      const errorText = await openaiResponse.text();
+      console.error("Erro OpenAI:", openaiResponse.status, errorText);
       return new Response(JSON.stringify({ 
-        error: `Erro na API OpenAI: ${response.status}`,
+        error: `Erro na API OpenAI: ${openaiResponse.status}`,
         debug_payload: openaiPayload 
       }), {
-        status: 200, // Retorna 200 para o frontend conseguir ler o debug_payload
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const data = await response.json();
-    const aiResponse = data.choices[0]?.message?.content || "Desculpe, não consegui processar sua solicitação.";
+    const openaiData = await openaiResponse.json();
+    const aiResponseText = openaiData.choices[0]?.message?.content || "{}";
+    
+    console.log("Resposta da IA:", aiResponseText);
 
-    console.log("Resposta da IA:", aiResponse.substring(0, 100) + "...");
+    // Passo 2: Parsear a resposta JSON
+    let parsedResponse: { sql?: string; explicacao?: string };
+    try {
+      parsedResponse = JSON.parse(aiResponseText);
+    } catch (parseError) {
+      console.error("Erro ao parsear JSON:", parseError);
+      return new Response(JSON.stringify({ 
+        response: "Desculpe, não consegui processar sua solicitação. Tente reformular a pergunta.",
+        debug_payload: openaiPayload,
+        ai_response: aiResponseText
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Se não tem SQL, retorna a explicação diretamente
+    if (!parsedResponse.sql) {
+      return new Response(JSON.stringify({ 
+        response: parsedResponse.explicacao || "Não consegui gerar uma consulta para essa pergunta.",
+        debug_payload: openaiPayload,
+        ai_response: parsedResponse
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Passo 3: Executar a query SQL no Supabase
+    console.log("Executando SQL:", parsedResponse.sql);
+    
+    const { data: queryResult, error: queryError } = await supabase.rpc('execute_readonly_query', {
+      query_text: parsedResponse.sql
+    }).maybeSingle();
+
+    let finalResponse: string;
+    let queryData: unknown = null;
+
+    if (queryError) {
+      console.error("Erro na query:", queryError);
+      // Tentar executar diretamente se a função RPC não existir
+      // Usando uma abordagem alternativa com consulta direta
+      try {
+        const { data: directResult, error: directError } = await supabase
+          .from('orders')
+          .select('*')
+          .limit(1);
+        
+        if (directError) {
+          finalResponse = `Desculpe, ocorreu um erro ao consultar os dados: ${queryError.message}`;
+        } else {
+          // A função RPC não existe, vamos precisar criar ou usar outra abordagem
+          finalResponse = `A consulta foi gerada mas não foi possível executá-la automaticamente. SQL gerado: ${parsedResponse.sql}`;
+        }
+      } catch (e) {
+        finalResponse = `Erro ao executar consulta: ${queryError.message}`;
+      }
+    } else {
+      queryData = queryResult;
+      console.log("Resultado da query:", queryResult);
+      
+      // Passo 4: Substituir {{valor}} pelo resultado
+      let valor = "0";
+      if (queryResult && typeof queryResult === 'object') {
+        // Pega o primeiro valor do resultado
+        const values = Object.values(queryResult);
+        if (values.length > 0) {
+          const rawValue = values[0];
+          if (typeof rawValue === 'number') {
+            valor = rawValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          } else {
+            valor = String(rawValue);
+          }
+        }
+      } else if (queryResult !== null && queryResult !== undefined) {
+        valor = String(queryResult);
+      }
+
+      finalResponse = (parsedResponse.explicacao || "Resultado: {{valor}}").replace("{{valor}}", valor);
+    }
 
     return new Response(JSON.stringify({ 
-      response: aiResponse,
-      debug_payload: openaiPayload 
+      response: finalResponse,
+      debug_payload: openaiPayload,
+      ai_response: parsedResponse,
+      query_result: queryData
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+
   } catch (error: unknown) {
     console.error("Erro na função geny-chat:", error);
     const errorMessage = error instanceof Error ? error.message : "Erro interno";
