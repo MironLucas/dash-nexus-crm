@@ -430,6 +430,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      execute_readonly_query: { Args: { query_text: string }; Returns: Json }
       get_my_role: {
         Args: never
         Returns: Database["public"]["Enums"]["app_role"]
