@@ -7,72 +7,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Schema do banco para o prompt
-const DATABASE_SCHEMA = `
-Você é um assistente de IA especializado em gerar consultas SQL para um CRM.
-
-SCHEMA DO BANCO DE DADOS:
-
-Tabela: orders
-- id_order (bigint, PK)
-- id_client (bigint, FK para customers)
-- vendedor (bigint, FK para vendedores)
-- data_pedido (timestamp with time zone)
-- status (varchar) - valores possíveis: 'pago', 'finalizado', 'pendente', 'cancelado'
-- valor_total (numeric)
-- valor_desconto (bigint)
-- valor_final (numeric)
-- taxa_entrega (numeric)
-- canal_venda (varchar)
-- transportadora (varchar)
-
-Tabela: customers
-- id_client (bigint, PK)
-- nome_completo (varchar)
-- email (varchar)
-- telefone (varchar)
-- document (varchar) - CPF/CNPJ
-- aniversario (date)
-- genero (varchar)
-- logadouro, numero, complemento, bairro, cidade, estado, cep (varchar) - endereço
-
-Tabela: products
-- id_product (bigint, PK)
-- titulo (varchar)
-- descricao (varchar)
-- sku (varchar)
-- categoria (varchar)
-- preco (numeric)
-- estoque (varchar)
-- ativo (varchar)
-
-Tabela: itens (itens dos pedidos)
-- id_itens (bigint, PK)
-- id_order (bigint, FK para orders)
-- id_product (bigint, FK para products)
-- product_total (numeric)
-- product_desc (numeric)
-- product_final (numeric)
-- variante1, variante2 (varchar)
-
-Tabela: vendedores
-- vendedor (bigint, PK)
-- nomevendedor (varchar)
-
-REGRAS:
-1. Sempre retorne um JSON válido com as chaves "sql" e "explicacao"
-2. A query SQL deve ser compatível com PostgreSQL
-3. Use apenas SELECT, nunca INSERT, UPDATE, DELETE ou DROP
-4. Para faturamento, use valor_final da tabela orders
-5. Para pedidos pagos/finalizados, filtre por status IN ('pago', 'finalizado')
-6. Use DATE_TRUNC para agrupar por período
-7. Use COALESCE para evitar NULL em somas
-8. Na explicacao, use {{valor}} onde o resultado da query deve aparecer
-9. Se a pergunta não for relacionada ao CRM, retorne uma mensagem educada
-
-Exemplo de resposta:
-{"sql":"SELECT COALESCE(SUM(valor_final), 0) AS resultado FROM orders WHERE DATE_TRUNC('month', data_pedido) = DATE_TRUNC('month', CURRENT_DATE)","explicacao":"O faturamento deste mês é de R$ {{valor}}."}
-`;
+// ID do Agent/Workflow treinado
+const AGENT_WORKFLOW_ID = "wf_6931ee8c3f9c8190b37bda50ff3cd6290398601714d6060b";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -92,79 +28,94 @@ serve(async (req) => {
     const { message } = await req.json();
     console.log("Mensagem recebida:", message);
 
-    // Passo 1: Enviar para o ChatGPT para gerar o SQL
-    const openaiPayload = {
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: DATABASE_SCHEMA,
-        },
-        {
-          role: "user",
-          content: message,
-        },
-      ],
-      temperature: 0.3,
-      max_tokens: 500,
-      response_format: { type: "json_object" },
+    // Chamada para o Agent/Workflow da OpenAI
+    const agentPayload = {
+      workflow_id: AGENT_WORKFLOW_ID,
+      input: {
+        user_message: message
+      }
     };
 
-    console.log("Enviando para OpenAI...");
+    console.log("Enviando para OpenAI Agent:", JSON.stringify(agentPayload));
     
-    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+    const openaiResponse = await fetch("https://api.openai.com/v1/workflows/runs", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${openaiApiKey}`,
         "Content-Type": "application/json",
+        "OpenAI-Beta": "workflows=v1"
       },
-      body: JSON.stringify(openaiPayload),
+      body: JSON.stringify(agentPayload),
     });
 
+    const responseStatus = openaiResponse.status;
+    const responseText = await openaiResponse.text();
+    
+    console.log("Status da resposta OpenAI:", responseStatus);
+    console.log("Resposta raw OpenAI:", responseText);
+
     if (!openaiResponse.ok) {
-      const errorText = await openaiResponse.text();
-      console.error("Erro OpenAI:", openaiResponse.status, errorText);
+      console.error("Erro OpenAI:", responseStatus, responseText);
       return new Response(JSON.stringify({ 
-        error: `Erro na API OpenAI: ${openaiResponse.status}`,
-        debug_payload: openaiPayload 
+        error: `Erro na API OpenAI: ${responseStatus}`,
+        details: responseText,
+        debug_payload: agentPayload 
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const openaiData = await openaiResponse.json();
-    const aiResponseText = openaiData.choices[0]?.message?.content || "{}";
-    
-    console.log("Resposta da IA:", aiResponseText);
-
-    // Passo 2: Parsear a resposta JSON
-    let parsedResponse: { sql?: string; explicacao?: string };
+    let openaiData;
     try {
-      parsedResponse = JSON.parse(aiResponseText);
-    } catch (parseError) {
-      console.error("Erro ao parsear JSON:", parseError);
+      openaiData = JSON.parse(responseText);
+    } catch (e) {
+      console.error("Erro ao parsear resposta:", e);
       return new Response(JSON.stringify({ 
-        response: "Desculpe, não consegui processar sua solicitação. Tente reformular a pergunta.",
-        debug_payload: openaiPayload,
-        ai_response: aiResponseText
+        error: "Erro ao parsear resposta da OpenAI",
+        raw_response: responseText,
+        debug_payload: agentPayload 
       }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    console.log("Resposta do Agent:", JSON.stringify(openaiData));
+
+    // O Agent deve retornar o JSON com sql e explicacao
+    let parsedResponse: { sql?: string; explicacao?: string };
+    
+    // Tentar extrair a resposta do Agent (pode variar dependendo da estrutura)
+    const agentOutput = openaiData.output || openaiData.result || openaiData;
+    
+    if (typeof agentOutput === 'string') {
+      try {
+        parsedResponse = JSON.parse(agentOutput);
+      } catch {
+        parsedResponse = { explicacao: agentOutput };
+      }
+    } else if (agentOutput.sql || agentOutput.explicacao) {
+      parsedResponse = agentOutput;
+    } else {
+      parsedResponse = { explicacao: JSON.stringify(agentOutput) };
+    }
+
+    console.log("Resposta parseada:", JSON.stringify(parsedResponse));
 
     // Se não tem SQL, retorna a explicação diretamente
     if (!parsedResponse.sql) {
       return new Response(JSON.stringify({ 
         response: parsedResponse.explicacao || "Não consegui gerar uma consulta para essa pergunta.",
-        debug_payload: openaiPayload,
-        ai_response: parsedResponse
+        debug_payload: agentPayload,
+        ai_response: parsedResponse,
+        raw_openai_response: openaiData
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Passo 3: Executar a query SQL no Supabase
+    // Executar a query SQL no Supabase
     console.log("Executando SQL:", parsedResponse.sql);
     
     const { data: queryResult, error: queryError } = await supabase.rpc('execute_readonly_query', {
@@ -176,31 +127,14 @@ serve(async (req) => {
 
     if (queryError) {
       console.error("Erro na query:", queryError);
-      // Tentar executar diretamente se a função RPC não existir
-      // Usando uma abordagem alternativa com consulta direta
-      try {
-        const { data: directResult, error: directError } = await supabase
-          .from('orders')
-          .select('*')
-          .limit(1);
-        
-        if (directError) {
-          finalResponse = `Desculpe, ocorreu um erro ao consultar os dados: ${queryError.message}`;
-        } else {
-          // A função RPC não existe, vamos precisar criar ou usar outra abordagem
-          finalResponse = `A consulta foi gerada mas não foi possível executá-la automaticamente. SQL gerado: ${parsedResponse.sql}`;
-        }
-      } catch (e) {
-        finalResponse = `Erro ao executar consulta: ${queryError.message}`;
-      }
+      finalResponse = `Desculpe, ocorreu um erro ao consultar os dados: ${queryError.message}`;
     } else {
       queryData = queryResult;
       console.log("Resultado da query:", queryResult);
       
-      // Passo 4: Substituir {{valor}} pelo resultado
+      // Substituir {{valor}} pelo resultado
       let valor = "0";
       if (queryResult && typeof queryResult === 'object') {
-        // Pega o primeiro valor do resultado
         const values = Object.values(queryResult);
         if (values.length > 0) {
           const rawValue = values[0];
@@ -219,9 +153,10 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ 
       response: finalResponse,
-      debug_payload: openaiPayload,
+      debug_payload: agentPayload,
       ai_response: parsedResponse,
-      query_result: queryData
+      query_result: queryData,
+      raw_openai_response: openaiData
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
