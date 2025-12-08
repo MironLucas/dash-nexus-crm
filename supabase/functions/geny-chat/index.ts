@@ -7,8 +7,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ID do Assistant treinado
-const ASSISTANT_ID = "asst_" + "wf_6931ee8c3f9c8190b37bda50ff3cd6290398601714d6060b".replace("wf_", "");
+// ID do Workflow do Agent
+const WORKFLOW_ID = "wf_6931ee8c3f9c8190b37bda50ff3cd6290398601714d6060b";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -28,35 +28,50 @@ serve(async (req) => {
     const { message } = await req.json();
     console.log("Mensagem recebida:", message);
 
-    // Criar uma thread
-    console.log("Criando thread...");
-    const threadResponse = await fetch("https://api.openai.com/v1/threads", {
+    // Criar sessão ChatKit
+    console.log("Criando sessão ChatKit com workflow:", WORKFLOW_ID);
+    const sessionResponse = await fetch("https://api.openai.com/v1/chatkit/sessions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${openaiApiKey}`,
         "Content-Type": "application/json",
-        "OpenAI-Beta": "assistants=v2"
+        "OpenAI-Beta": "chatkit_beta=v1"
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        workflow: { id: WORKFLOW_ID },
+        user: "geny-crm-user"
+      }),
     });
 
-    if (!threadResponse.ok) {
-      const errorText = await threadResponse.text();
-      console.error("Erro ao criar thread:", errorText);
-      throw new Error(`Erro ao criar thread: ${errorText}`);
+    const sessionStatus = sessionResponse.status;
+    const sessionText = await sessionResponse.text();
+    
+    console.log("Status da sessão ChatKit:", sessionStatus);
+    console.log("Resposta sessão:", sessionText);
+
+    if (!sessionResponse.ok) {
+      console.error("Erro ao criar sessão ChatKit:", sessionStatus, sessionText);
+      return new Response(JSON.stringify({ 
+        error: `Erro ao criar sessão ChatKit: ${sessionStatus}`,
+        details: sessionText
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const thread = await threadResponse.json();
-    console.log("Thread criada:", thread.id);
+    const sessionData = JSON.parse(sessionText);
+    const sessionId = sessionData.id;
+    console.log("Sessão criada:", sessionId);
 
-    // Adicionar mensagem à thread
-    console.log("Adicionando mensagem à thread...");
-    const messageResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/messages`, {
+    // Enviar mensagem para o ChatKit
+    console.log("Enviando mensagem para ChatKit...");
+    const messageResponse = await fetch(`https://api.openai.com/v1/chatkit/sessions/${sessionId}/messages`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${openaiApiKey}`,
         "Content-Type": "application/json",
-        "OpenAI-Beta": "assistants=v2"
+        "OpenAI-Beta": "chatkit_beta=v1"
       },
       body: JSON.stringify({
         role: "user",
@@ -64,84 +79,58 @@ serve(async (req) => {
       }),
     });
 
-    if (!messageResponse.ok) {
-      const errorText = await messageResponse.text();
-      console.error("Erro ao adicionar mensagem:", errorText);
-      throw new Error(`Erro ao adicionar mensagem: ${errorText}`);
-    }
-
-    console.log("Mensagem adicionada com sucesso");
-
-    // Executar o assistant
-    console.log("Executando assistant:", ASSISTANT_ID);
-    const runResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/runs`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openaiApiKey}`,
-        "Content-Type": "application/json",
-        "OpenAI-Beta": "assistants=v2"
-      },
-      body: JSON.stringify({
-        assistant_id: ASSISTANT_ID
-      }),
-    });
-
-    if (!runResponse.ok) {
-      const errorText = await runResponse.text();
-      console.error("Erro ao executar run:", errorText);
-      throw new Error(`Erro ao executar run: ${errorText}`);
-    }
-
-    let run = await runResponse.json();
-    console.log("Run iniciado:", run.id, "Status:", run.status);
-
-    // Aguardar conclusão do run (polling)
-    let attempts = 0;
-    const maxAttempts = 30;
+    const messageStatus = messageResponse.status;
+    const messageText = await messageResponse.text();
     
-    while (run.status !== "completed" && run.status !== "failed" && attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const statusResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/runs/${run.id}`, {
-        headers: {
-          Authorization: `Bearer ${openaiApiKey}`,
-          "OpenAI-Beta": "assistants=v2"
-        },
+    console.log("Status da mensagem:", messageStatus);
+    console.log("Resposta da mensagem:", messageText);
+
+    if (!messageResponse.ok) {
+      console.error("Erro ao enviar mensagem:", messageStatus, messageText);
+      return new Response(JSON.stringify({ 
+        error: `Erro ao enviar mensagem: ${messageStatus}`,
+        details: messageText
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-      
-      run = await statusResponse.json();
-      console.log("Status do run:", run.status, "Tentativa:", attempts + 1);
-      attempts++;
     }
 
-    if (run.status !== "completed") {
-      throw new Error(`Run não completou. Status: ${run.status}`);
-    }
-
-    // Buscar mensagens da thread
-    console.log("Buscando mensagens da thread...");
-    const messagesResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/messages`, {
+    const messageData = JSON.parse(messageText);
+    
+    // Aguardar e buscar a resposta do agent
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    const listResponse = await fetch(`https://api.openai.com/v1/chatkit/sessions/${sessionId}/messages`, {
       headers: {
         Authorization: `Bearer ${openaiApiKey}`,
-        "OpenAI-Beta": "assistants=v2"
+        "OpenAI-Beta": "chatkit_beta=v1"
       },
     });
 
-    const messagesData = await messagesResponse.json();
-    const assistantMessage = messagesData.data.find((m: any) => m.role === "assistant");
+    const listText = await listResponse.text();
+    console.log("Lista de mensagens:", listText);
+    
+    const listData = JSON.parse(listText);
+    const assistantMessage = listData.data?.find((m: any) => m.role === "assistant");
     
     if (!assistantMessage) {
-      throw new Error("Nenhuma resposta do assistant encontrada");
+      return new Response(JSON.stringify({ 
+        response: "Aguardando resposta do agente...",
+        session_id: sessionId,
+        messages: listData.data
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const rawContent = assistantMessage.content[0]?.text?.value || "";
-    console.log("Resposta raw do assistant:", rawContent);
+    const rawContent = assistantMessage.content || "";
+    console.log("Resposta raw do agent:", rawContent);
 
     // Tentar parsear como JSON
     let parsedResponse: { sql?: string; explicacao?: string };
     
     try {
-      // Tentar extrair JSON do conteúdo (pode vir com markdown)
       const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         parsedResponse = JSON.parse(jsonMatch[0]);
@@ -183,7 +172,6 @@ serve(async (req) => {
       queryData = queryResult;
       console.log("Resultado da query:", queryResult);
       
-      // Substituir {{valor}} pelo resultado
       let valor = "0";
       if (queryResult && typeof queryResult === 'object') {
         const values = Object.values(queryResult);
