@@ -7,8 +7,55 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ID do Workflow do Agent
-const WORKFLOW_ID = "wf_6931ee8c3f9c8190b37bda50ff3cd6290398601714d6060b";
+const SYSTEM_PROMPT = `Você é a Geny, assistente de IA integrada ao CRM. Sua função é interpretar informações de vendas, pedidos, clientes e produtos. Você responde sempre em português brasileiro, com clareza e profissionalismo. Formate valores monetários como R$ 0,00. Se não tiver dados suficientes, diga claramente. Seja concisa, objetiva e sempre útil.
+
+Sempre que o usuário fizer uma pergunta sobre números, vendas, faturamento, pedidos ou clientes:
+- Gere a query SQL correta.
+- Retorne no campo "sql" a consulta pronta para ser executada no Supabase.
+- Retorne no campo "explicacao" a resposta amigável para o usuário, usando a variável {{valor}}, que será preenchida automaticamente.
+- Nunca execute a query, apenas gere.
+- A query deve sempre estar totalmente correta, completa e segura.
+
+Estrutura do banco de dados que você deve usar para montar as queries:
+
+Tabela "orders"
+- id_order: código do pedido
+- id_client: código do cliente
+- status: status atual do pedido (Finalizado, Pendente, Pago)
+- valor_total: valor total do pedido (ex: 699.99)
+- valor_desconto: valor do desconto do pedido (ex: 100 ou 99.99)
+- taxa_entrega: valor da taxa de entrega (ex: 14.99)
+- canal_venda: canal de venda do pedido (ex: Shopify)
+- data_pedido: data do pedido (ex: 2025-10-10 14:58:45+00)
+- vendedor: id do vendedor
+- transportadora: transportadora responsável
+- valor_final: valor final do pedido com descontos e frete (ex: 614.99)
+
+Tabela "customers"
+- id_client: código do cliente
+- nome_completo: nome completo do cliente
+- document: CPF do cliente
+- email: email do cliente
+- telefone: telefone do cliente
+- cidade: cidade do cliente
+- estado: estado do cliente
+- aniversario: data de aniversário
+- genero: gênero do cliente
+
+Tabela "products"
+- id_product: código do produto
+- titulo: nome do produto
+- preco: preço do produto
+- categoria: categoria do produto
+- estoque: quantidade em estoque
+- ativo: se está ativo ou não
+
+Tabela "vendedores"
+- vendedor: id do vendedor
+- nomevendedor: nome do vendedor
+
+Sua saída sempre deve conter exatamente:
+{"sql": "A QUERY SQL AQUI", "explicacao": "A frase amigável com {{valor}} aqui"}`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -28,106 +75,45 @@ serve(async (req) => {
     const { message } = await req.json();
     console.log("Mensagem recebida:", message);
 
-    // Criar sessão ChatKit
-    console.log("Criando sessão ChatKit com workflow:", WORKFLOW_ID);
-    const sessionResponse = await fetch("https://api.openai.com/v1/chatkit/sessions", {
+    // Chamar a API de Chat Completions da OpenAI
+    console.log("Enviando para OpenAI Chat Completions...");
+    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${openaiApiKey}`,
+        "Authorization": `Bearer ${openaiApiKey}`,
         "Content-Type": "application/json",
-        "OpenAI-Beta": "chatkit_beta=v1"
       },
       body: JSON.stringify({
-        workflow: { id: WORKFLOW_ID },
-        user: "geny-crm-user"
+        model: "gpt-3.5-turbo",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: message }
+        ],
       }),
     });
 
-    const sessionStatus = sessionResponse.status;
-    const sessionText = await sessionResponse.text();
+    const openaiStatus = openaiResponse.status;
+    const openaiText = await openaiResponse.text();
     
-    console.log("Status da sessão ChatKit:", sessionStatus);
-    console.log("Resposta sessão:", sessionText);
+    console.log("Status OpenAI:", openaiStatus);
+    console.log("Resposta OpenAI:", openaiText);
 
-    if (!sessionResponse.ok) {
-      console.error("Erro ao criar sessão ChatKit:", sessionStatus, sessionText);
+    if (!openaiResponse.ok) {
+      console.error("Erro na API OpenAI:", openaiStatus, openaiText);
       return new Response(JSON.stringify({ 
-        error: `Erro ao criar sessão ChatKit: ${sessionStatus}`,
-        details: sessionText
+        error: `Erro na API OpenAI: ${openaiStatus}`,
+        details: openaiText
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const sessionData = JSON.parse(sessionText);
-    const sessionId = sessionData.id;
-    console.log("Sessão criada:", sessionId);
+    const openaiData = JSON.parse(openaiText);
+    const rawContent = openaiData.choices?.[0]?.message?.content || "";
+    console.log("Resposta raw do GPT:", rawContent);
 
-    // Enviar mensagem para o ChatKit
-    console.log("Enviando mensagem para ChatKit...");
-    const messageResponse = await fetch(`https://api.openai.com/v1/chatkit/sessions/${sessionId}/messages`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openaiApiKey}`,
-        "Content-Type": "application/json",
-        "OpenAI-Beta": "chatkit_beta=v1"
-      },
-      body: JSON.stringify({
-        role: "user",
-        content: message
-      }),
-    });
-
-    const messageStatus = messageResponse.status;
-    const messageText = await messageResponse.text();
-    
-    console.log("Status da mensagem:", messageStatus);
-    console.log("Resposta da mensagem:", messageText);
-
-    if (!messageResponse.ok) {
-      console.error("Erro ao enviar mensagem:", messageStatus, messageText);
-      return new Response(JSON.stringify({ 
-        error: `Erro ao enviar mensagem: ${messageStatus}`,
-        details: messageText
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const messageData = JSON.parse(messageText);
-    
-    // Aguardar e buscar a resposta do agent
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    const listResponse = await fetch(`https://api.openai.com/v1/chatkit/sessions/${sessionId}/messages`, {
-      headers: {
-        Authorization: `Bearer ${openaiApiKey}`,
-        "OpenAI-Beta": "chatkit_beta=v1"
-      },
-    });
-
-    const listText = await listResponse.text();
-    console.log("Lista de mensagens:", listText);
-    
-    const listData = JSON.parse(listText);
-    const assistantMessage = listData.data?.find((m: any) => m.role === "assistant");
-    
-    if (!assistantMessage) {
-      return new Response(JSON.stringify({ 
-        response: "Aguardando resposta do agente...",
-        session_id: sessionId,
-        messages: listData.data
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const rawContent = assistantMessage.content || "";
-    console.log("Resposta raw do agent:", rawContent);
-
-    // Tentar parsear como JSON
+    // Parsear a resposta JSON do GPT
     let parsedResponse: { sql?: string; explicacao?: string };
     
     try {
@@ -178,7 +164,7 @@ serve(async (req) => {
         if (values.length > 0) {
           const rawValue = values[0];
           if (typeof rawValue === 'number') {
-            valor = rawValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            valor = "R$ " + rawValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
           } else {
             valor = String(rawValue);
           }
