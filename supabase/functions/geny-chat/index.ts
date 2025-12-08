@@ -7,8 +7,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ID do Agent/Workflow treinado
-const AGENT_WORKFLOW_ID = "wf_6931ee8c3f9c8190b37bda50ff3cd6290398601714d6060b";
+// ID do Assistant treinado
+const ASSISTANT_ID = "asst_" + "wf_6931ee8c3f9c8190b37bda50ff3cd6290398601714d6060b".replace("wf_", "");
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -28,77 +28,129 @@ serve(async (req) => {
     const { message } = await req.json();
     console.log("Mensagem recebida:", message);
 
-    // Chamada para o Agent/Workflow da OpenAI
-    const agentPayload = {
-      workflow_id: AGENT_WORKFLOW_ID,
-      input: {
-        user_message: message
-      }
-    };
-
-    console.log("Enviando para OpenAI Agent:", JSON.stringify(agentPayload));
-    
-    const openaiResponse = await fetch("https://api.openai.com/v1/workflows/runs", {
+    // Criar uma thread
+    console.log("Criando thread...");
+    const threadResponse = await fetch("https://api.openai.com/v1/threads", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${openaiApiKey}`,
         "Content-Type": "application/json",
-        "OpenAI-Beta": "workflows=v1"
+        "OpenAI-Beta": "assistants=v2"
       },
-      body: JSON.stringify(agentPayload),
+      body: JSON.stringify({}),
     });
 
-    const responseStatus = openaiResponse.status;
-    const responseText = await openaiResponse.text();
+    if (!threadResponse.ok) {
+      const errorText = await threadResponse.text();
+      console.error("Erro ao criar thread:", errorText);
+      throw new Error(`Erro ao criar thread: ${errorText}`);
+    }
+
+    const thread = await threadResponse.json();
+    console.log("Thread criada:", thread.id);
+
+    // Adicionar mensagem à thread
+    console.log("Adicionando mensagem à thread...");
+    const messageResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openaiApiKey}`,
+        "Content-Type": "application/json",
+        "OpenAI-Beta": "assistants=v2"
+      },
+      body: JSON.stringify({
+        role: "user",
+        content: message
+      }),
+    });
+
+    if (!messageResponse.ok) {
+      const errorText = await messageResponse.text();
+      console.error("Erro ao adicionar mensagem:", errorText);
+      throw new Error(`Erro ao adicionar mensagem: ${errorText}`);
+    }
+
+    console.log("Mensagem adicionada com sucesso");
+
+    // Executar o assistant
+    console.log("Executando assistant:", ASSISTANT_ID);
+    const runResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/runs`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openaiApiKey}`,
+        "Content-Type": "application/json",
+        "OpenAI-Beta": "assistants=v2"
+      },
+      body: JSON.stringify({
+        assistant_id: ASSISTANT_ID
+      }),
+    });
+
+    if (!runResponse.ok) {
+      const errorText = await runResponse.text();
+      console.error("Erro ao executar run:", errorText);
+      throw new Error(`Erro ao executar run: ${errorText}`);
+    }
+
+    let run = await runResponse.json();
+    console.log("Run iniciado:", run.id, "Status:", run.status);
+
+    // Aguardar conclusão do run (polling)
+    let attempts = 0;
+    const maxAttempts = 30;
     
-    console.log("Status da resposta OpenAI:", responseStatus);
-    console.log("Resposta raw OpenAI:", responseText);
-
-    if (!openaiResponse.ok) {
-      console.error("Erro OpenAI:", responseStatus, responseText);
-      return new Response(JSON.stringify({ 
-        error: `Erro na API OpenAI: ${responseStatus}`,
-        details: responseText,
-        debug_payload: agentPayload 
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    while (run.status !== "completed" && run.status !== "failed" && attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const statusResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/runs/${run.id}`, {
+        headers: {
+          Authorization: `Bearer ${openaiApiKey}`,
+          "OpenAI-Beta": "assistants=v2"
+        },
       });
+      
+      run = await statusResponse.json();
+      console.log("Status do run:", run.status, "Tentativa:", attempts + 1);
+      attempts++;
     }
 
-    let openaiData;
-    try {
-      openaiData = JSON.parse(responseText);
-    } catch (e) {
-      console.error("Erro ao parsear resposta:", e);
-      return new Response(JSON.stringify({ 
-        error: "Erro ao parsear resposta da OpenAI",
-        raw_response: responseText,
-        debug_payload: agentPayload 
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (run.status !== "completed") {
+      throw new Error(`Run não completou. Status: ${run.status}`);
     }
 
-    console.log("Resposta do Agent:", JSON.stringify(openaiData));
+    // Buscar mensagens da thread
+    console.log("Buscando mensagens da thread...");
+    const messagesResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/messages`, {
+      headers: {
+        Authorization: `Bearer ${openaiApiKey}`,
+        "OpenAI-Beta": "assistants=v2"
+      },
+    });
 
-    // O Agent deve retornar o JSON com sql e explicacao
+    const messagesData = await messagesResponse.json();
+    const assistantMessage = messagesData.data.find((m: any) => m.role === "assistant");
+    
+    if (!assistantMessage) {
+      throw new Error("Nenhuma resposta do assistant encontrada");
+    }
+
+    const rawContent = assistantMessage.content[0]?.text?.value || "";
+    console.log("Resposta raw do assistant:", rawContent);
+
+    // Tentar parsear como JSON
     let parsedResponse: { sql?: string; explicacao?: string };
     
-    // Tentar extrair a resposta do Agent (pode variar dependendo da estrutura)
-    const agentOutput = openaiData.output || openaiData.result || openaiData;
-    
-    if (typeof agentOutput === 'string') {
-      try {
-        parsedResponse = JSON.parse(agentOutput);
-      } catch {
-        parsedResponse = { explicacao: agentOutput };
+    try {
+      // Tentar extrair JSON do conteúdo (pode vir com markdown)
+      const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsedResponse = JSON.parse(jsonMatch[0]);
+      } else {
+        parsedResponse = { explicacao: rawContent };
       }
-    } else if (agentOutput.sql || agentOutput.explicacao) {
-      parsedResponse = agentOutput;
-    } else {
-      parsedResponse = { explicacao: JSON.stringify(agentOutput) };
+    } catch (e) {
+      console.log("Não foi possível parsear como JSON, usando texto direto");
+      parsedResponse = { explicacao: rawContent };
     }
 
     console.log("Resposta parseada:", JSON.stringify(parsedResponse));
@@ -107,9 +159,8 @@ serve(async (req) => {
     if (!parsedResponse.sql) {
       return new Response(JSON.stringify({ 
         response: parsedResponse.explicacao || "Não consegui gerar uma consulta para essa pergunta.",
-        debug_payload: agentPayload,
         ai_response: parsedResponse,
-        raw_openai_response: openaiData
+        raw_response: rawContent
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -153,10 +204,9 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ 
       response: finalResponse,
-      debug_payload: agentPayload,
       ai_response: parsedResponse,
       query_result: queryData,
-      raw_openai_response: openaiData
+      raw_response: rawContent
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
