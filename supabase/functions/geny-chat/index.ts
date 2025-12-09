@@ -7,12 +7,13 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM_PROMPT = `Você é a Geny, assistente de IA integrada ao CRM. Sua função é interpretar informações de vendas, pedidos, clientes e produtos. Você responde sempre em português brasileiro, com clareza e profissionalismo. Formate valores monetários como R$ 0,00. Se não tiver dados suficientes, diga claramente. Seja concisa, objetiva e sempre útil.
+const SYSTEM_PROMPT = `Você é a Geny, assistente de IA integrada ao CRM. Sua função é interpretar informações de vendas, pedidos, clientes e produtos. Você responde sempre em português brasileiro, com clareza e profissionalismo. NÃO formate valores monetários na explicação - apenas use os placeholders. Se não tiver dados suficientes, diga claramente. Seja concisa, objetiva e sempre útil.
 
 Sempre que o usuário fizer uma pergunta sobre números, vendas, faturamento, pedidos ou clientes:
 - Gere a query SQL correta.
 - Retorne no campo "sql" a consulta pronta para ser executada no Supabase.
-- Retorne no campo "explicacao" a resposta amigável para o usuário, usando a variável {{valor}}, que será preenchida automaticamente.
+- Retorne no campo "explicacao" a resposta amigável para o usuário.
+- IMPORTANTE: Use placeholders que correspondam EXATAMENTE aos nomes das colunas (alias) da query SQL. Por exemplo, se a query tem "SUM(valor_total) AS faturamento_total", use {{faturamento_total}} na explicação.
 - Nunca execute a query, apenas gere.
 - A query deve sempre estar totalmente correta, completa e segura.
 
@@ -55,7 +56,10 @@ Tabela "vendedores"
 - nomevendedor: nome do vendedor
 
 Sua saída sempre deve conter exatamente:
-{"sql": "A QUERY SQL AQUI", "explicacao": "A frase amigável com {{valor}} aqui"}`;
+{"sql": "SELECT SUM(valor_total) AS total FROM orders", "explicacao": "O total é {{total}}."}
+
+EXEMPLO: Se o usuário perguntar "Qual o faturamento, desconto e taxa de entrega deste mês?", você deve responder:
+{"sql": "SELECT SUM(valor_final) AS faturamento, SUM(valor_desconto) AS desconto, SUM(taxa_entrega) AS entrega FROM orders WHERE EXTRACT(MONTH FROM data_pedido) = EXTRACT(MONTH FROM CURRENT_DATE)", "explicacao": "O faturamento deste mês é {{faturamento}}, o total de desconto foi {{desconto}} e a taxa de entrega total foi {{entrega}}."}`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -158,22 +162,24 @@ serve(async (req) => {
       queryData = queryResult;
       console.log("Resultado da query:", queryResult);
       
-      let valor = "0";
+      // Substituir todos os placeholders pelos valores correspondentes
+      finalResponse = parsedResponse.explicacao || "Resultado disponível.";
+      
       if (queryResult && typeof queryResult === 'object') {
-        const values = Object.values(queryResult);
-        if (values.length > 0) {
-          const rawValue = values[0];
+        const resultObj = queryResult as Record<string, unknown>;
+        for (const [key, rawValue] of Object.entries(resultObj)) {
+          let formattedValue: string;
           if (typeof rawValue === 'number') {
-            valor = "R$ " + rawValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            formattedValue = "R$ " + rawValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          } else if (rawValue === null || rawValue === undefined) {
+            formattedValue = "R$ 0,00";
           } else {
-            valor = String(rawValue);
+            formattedValue = String(rawValue);
           }
+          // Substituir o placeholder correspondente ao nome da coluna
+          finalResponse = finalResponse.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), formattedValue);
         }
-      } else if (queryResult !== null && queryResult !== undefined) {
-        valor = String(queryResult);
       }
-
-      finalResponse = (parsedResponse.explicacao || "Resultado: {{valor}}").replace("{{valor}}", valor);
     }
 
     return new Response(JSON.stringify({ 
