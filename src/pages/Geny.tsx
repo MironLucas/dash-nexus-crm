@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Bot, User, Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { Send, Bot, User, Loader2, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -16,7 +16,7 @@ interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
-  timestamp: Date;
+  timestamp: string;
 }
 
 interface DebugInfo {
@@ -25,15 +25,49 @@ interface DebugInfo {
   queryResult?: unknown;
 }
 
+const STORAGE_KEY = "geny_chat_messages";
+const EXPIRATION_KEY = "geny_chat_expiration";
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+const getStoredMessages = (): Message[] => {
+  try {
+    const expiration = localStorage.getItem(EXPIRATION_KEY);
+    if (expiration && Date.now() > parseInt(expiration)) {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(EXPIRATION_KEY);
+      return [];
+    }
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveMessages = (messages: Message[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    if (!localStorage.getItem(EXPIRATION_KEY)) {
+      localStorage.setItem(EXPIRATION_KEY, String(Date.now() + ONE_DAY_MS));
+    }
+  } catch {
+    console.error("Erro ao salvar mensagens");
+  }
+};
+
 const Geny = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      content: "Olá! Eu sou a Geny, sua assistente de IA integrada ao CRM. Posso ajudá-lo a consultar informações sobre vendas, clientes, pedidos e muito mais. Como posso ajudar?",
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    const stored = getStoredMessages();
+    if (stored.length > 0) return stored;
+    return [
+      {
+        id: "welcome",
+        role: "assistant",
+        content: "Olá! Eu sou a Geny, sua assistente de IA integrada ao CRM. Posso ajudá-lo a consultar informações sobre vendas, clientes, pedidos e muito mais. Como posso ajudar?",
+        timestamp: new Date().toISOString(),
+      },
+    ];
+  });
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
@@ -49,6 +83,24 @@ const Geny = () => {
     }
   }, [messages]);
 
+  useEffect(() => {
+    saveMessages(messages);
+  }, [messages]);
+
+  const clearChat = () => {
+    const welcomeMessage: Message = {
+      id: "welcome",
+      role: "assistant",
+      content: "Olá! Eu sou a Geny, sua assistente de IA integrada ao CRM. Posso ajudá-lo a consultar informações sobre vendas, clientes, pedidos e muito mais. Como posso ajudar?",
+      timestamp: new Date().toISOString(),
+    };
+    setMessages([welcomeMessage]);
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(EXPIRATION_KEY);
+    setDebugInfo(null);
+    toast({ title: "Chat limpo", description: "Histórico de mensagens foi apagado." });
+  };
+
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
 
@@ -56,7 +108,7 @@ const Geny = () => {
       id: Date.now().toString(),
       role: "user",
       content: input.trim(),
-      timestamp: new Date(),
+      timestamp: new Date().toISOString(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
@@ -69,7 +121,6 @@ const Geny = () => {
         body: { message: input.trim() },
       });
 
-      // Sempre salvar info de debug
       if (data) {
         setDebugInfo({
           payload: data.debug_payload,
@@ -80,7 +131,6 @@ const Geny = () => {
 
       if (error) throw error;
 
-      // Se há erro da OpenAI mas temos o payload
       if (data?.error) {
         toast({
           title: "Erro da API",
@@ -94,7 +144,7 @@ const Geny = () => {
         id: (Date.now() + 1).toString(),
         role: "assistant",
         content: data.response || "Desculpe, não consegui processar sua solicitação.",
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -118,15 +168,21 @@ const Geny = () => {
     }
   };
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const formatTime = (timestamp: string) => {
+    return new Date(timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Geny</h1>
-        <p className="text-muted-foreground">Assistente de IA integrada ao CRM</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Geny</h1>
+          <p className="text-muted-foreground">Assistente de IA integrada ao CRM</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={clearChat}>
+          <Trash2 className="h-4 w-4 mr-2" />
+          Limpar Chat
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
