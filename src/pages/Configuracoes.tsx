@@ -3,12 +3,17 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { CheckCircle, Key } from "lucide-react";
+import { CheckCircle, Key, MessageSquare, Save, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 const Configuracoes = () => {
   const [role, setRole] = useState<string | null>(null);
+  const [genyPrompt, setGenyPrompt] = useState<string>("");
+  const [loadingPrompt, setLoadingPrompt] = useState(true);
+  const [savingPrompt, setSavingPrompt] = useState(false);
 
   useEffect(() => {
     const loadRole = async () => {
@@ -20,6 +25,57 @@ const Configuracoes = () => {
     };
     loadRole();
   }, []);
+
+  useEffect(() => {
+    const loadPrompt = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('system_config')
+          .select('value')
+          .eq('key', 'geny_prompt')
+          .maybeSingle();
+
+        if (error) {
+          console.error('Erro ao carregar prompt:', error);
+          toast.error('Erro ao carregar o prompt');
+        } else if (data?.value) {
+          setGenyPrompt(data.value);
+        }
+      } catch (err) {
+        console.error('Erro:', err);
+      } finally {
+        setLoadingPrompt(false);
+      }
+    };
+
+    if (role === 'admin') {
+      loadPrompt();
+    } else {
+      setLoadingPrompt(false);
+    }
+  }, [role]);
+
+  const handleSavePrompt = async () => {
+    setSavingPrompt(true);
+    try {
+      const { error } = await supabase
+        .from('system_config')
+        .update({ value: genyPrompt })
+        .eq('key', 'geny_prompt');
+
+      if (error) {
+        console.error('Erro ao salvar prompt:', error);
+        toast.error('Erro ao salvar o prompt');
+      } else {
+        toast.success('Prompt salvo com sucesso!');
+      }
+    } catch (err) {
+      console.error('Erro:', err);
+      toast.error('Erro ao salvar o prompt');
+    } finally {
+      setSavingPrompt(false);
+    }
+  };
 
   if (role === 'vendedor') {
     return (
@@ -86,6 +142,53 @@ const Configuracoes = () => {
             </p>
           </CardContent>
         </Card>
+
+        {role === 'admin' && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                Prompt da Geny
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Configure o prompt que será enviado para o ChatGPT quando a Geny processar suas perguntas. 
+                Este prompt define como a IA deve interpretar e responder às consultas.
+              </p>
+              {loadingPrompt ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="geny-prompt">Prompt do Sistema</Label>
+                    <Textarea
+                      id="geny-prompt"
+                      value={genyPrompt}
+                      onChange={(e) => setGenyPrompt(e.target.value)}
+                      placeholder="Digite o prompt do sistema..."
+                      className="min-h-[400px] font-mono text-sm"
+                    />
+                  </div>
+                  <Button 
+                    onClick={handleSavePrompt} 
+                    disabled={savingPrompt}
+                    className="flex items-center gap-2"
+                  >
+                    {savingPrompt ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                    Salvar Prompt
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>
