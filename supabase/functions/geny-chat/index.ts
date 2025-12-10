@@ -2,12 +2,14 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const SYSTEM_PROMPT = `Você é a Geny, assistente de IA integrada ao CRM. Sua função é interpretar informações de vendas, pedidos, clientes e produtos. Você responde sempre em português brasileiro, com clareza e profissionalismo. NÃO formate valores monetários na explicação - apenas use os placeholders. Se não tiver dados suficientes, diga claramente. Seja concisa, objetiva e sempre útil.
+const DEFAULT_SYSTEM_PROMPT = `Você é a Geny, assistente de IA integrada ao CRM. Sua função é interpretar informações de vendas, pedidos, clientes e produtos. Você responde sempre em português brasileiro, com clareza e profissionalismo. NÃO formate valores monetários na explicação - apenas use os placeholders. Se não tiver dados suficientes, diga claramente. Seja concisa, objetiva e sempre útil.
 
 Sempre que o usuário fizer uma pergunta sobre números, vendas, faturamento, pedidos ou clientes:
 - Gere a query SQL correta.
@@ -61,145 +63,176 @@ Sua saída sempre deve conter exatamente:
 EXEMPLO: Se o usuário perguntar "Qual o faturamento, desconto e taxa de entrega deste mês?", você deve responder:
 {"sql": "SELECT SUM(valor_final) AS faturamento, SUM(valor_desconto) AS desconto, SUM(taxa_entrega) AS entrega FROM orders WHERE EXTRACT(MONTH FROM data_pedido) = EXTRACT(MONTH FROM CURRENT_DATE)", "explicacao": "O faturamento deste mês é {{faturamento}}, o total de desconto foi {{desconto}} e a taxa de entrega total foi {{entrega}}."}`;
 
+async function getSystemPrompt(): Promise<string> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.log('Supabase credentials not found, using default prompt');
+      return DEFAULT_SYSTEM_PROMPT;
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    const { data, error } = await supabase
+      .from('system_config')
+      .select('value')
+      .eq('key', 'geny_prompt')
+      .maybeSingle();
+    
+    if (error) {
+      console.error('Error fetching prompt from database:', error);
+      return DEFAULT_SYSTEM_PROMPT;
+    }
+    
+    if (data?.value) {
+      console.log('Using custom prompt from database');
+      return data.value;
+    }
+    
+    console.log('No custom prompt found, using default');
+    return DEFAULT_SYSTEM_PROMPT;
+  } catch (err) {
+    console.error('Error in getSystemPrompt:', err);
+    return DEFAULT_SYSTEM_PROMPT;
+  }
+}
+
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
+  if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
-    if (!openaiApiKey) {
-      throw new Error("OPENAI_API_KEY não configurada");
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
     const { message } = await req.json();
-    console.log("Mensagem recebida:", message);
+    console.log('Received message:', message);
 
-    // Chamar a API de Chat Completions da OpenAI
-    console.log("Enviando para OpenAI Chat Completions...");
-    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
+    // Buscar o prompt do banco de dados
+    const systemPrompt = await getSystemPrompt();
+
+    // Chamar OpenAI para gerar SQL
+    const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
       headers: {
-        "Authorization": `Bearer ${openaiApiKey}`,
-        "Content-Type": "application/json",
+        'Authorization': `Bearer ${openAIApiKey}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: "gpt-3.5-turbo",
+        model: 'gpt-3.5-turbo',
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: message }
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: message }
         ],
+        temperature: 0.3,
       }),
     });
 
-    const openaiStatus = openaiResponse.status;
-    const openaiText = await openaiResponse.text();
-    
-    console.log("Status OpenAI:", openaiStatus);
-    console.log("Resposta OpenAI:", openaiText);
+    const openAIData = await openAIResponse.json();
+    console.log('OpenAI response:', JSON.stringify(openAIData, null, 2));
 
-    if (!openaiResponse.ok) {
-      console.error("Erro na API OpenAI:", openaiStatus, openaiText);
-      return new Response(JSON.stringify({ 
-        error: `Erro na API OpenAI: ${openaiStatus}`,
-        details: openaiText
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!openAIData.choices || !openAIData.choices[0]) {
+      throw new Error('Invalid response from OpenAI');
     }
 
-    const openaiData = JSON.parse(openaiText);
-    const rawContent = openaiData.choices?.[0]?.message?.content || "";
-    console.log("Resposta raw do GPT:", rawContent);
+    const aiContent = openAIData.choices[0].message.content;
+    console.log('AI content:', aiContent);
 
-    // Parsear a resposta JSON do GPT
-    let parsedResponse: { sql?: string; explicacao?: string };
-    
+    // Tentar parsear a resposta como JSON
+    let parsedResponse;
     try {
-      const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        parsedResponse = JSON.parse(jsonMatch[0]);
-      } else {
-        parsedResponse = { explicacao: rawContent };
-      }
-    } catch (e) {
-      console.log("Não foi possível parsear como JSON, usando texto direto");
-      parsedResponse = { explicacao: rawContent };
-    }
-
-    console.log("Resposta parseada:", JSON.stringify(parsedResponse));
-
-    // Se não tem SQL, retorna a explicação diretamente
-    if (!parsedResponse.sql) {
+      // Limpar possíveis caracteres extras
+      const cleanContent = aiContent.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      parsedResponse = JSON.parse(cleanContent);
+    } catch (parseError) {
+      console.error('Failed to parse AI response as JSON:', parseError);
       return new Response(JSON.stringify({ 
-        response: parsedResponse.explicacao || "Não consegui gerar uma consulta para essa pergunta.",
-        ai_response: parsedResponse,
-        raw_response: rawContent
+        response: aiContent,
+        error: 'Não foi possível processar a resposta como JSON'
       }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Executar a query SQL no Supabase
-    console.log("Executando SQL:", parsedResponse.sql);
-    
-    const { data: queryResult, error: queryError } = await supabase.rpc('execute_readonly_query', {
-      query_text: parsedResponse.sql
-    }).maybeSingle();
-
-    let finalResponse: string;
-    let queryData: unknown = null;
-
-    if (queryError) {
-      console.error("Erro na query:", queryError);
-      finalResponse = `Desculpe, ocorreu um erro ao consultar os dados: ${queryError.message}`;
-    } else {
-      queryData = queryResult;
-      console.log("Resultado da query:", queryResult);
+    // Se temos SQL, executar a query
+    if (parsedResponse.sql) {
+      console.log('Executing SQL:', parsedResponse.sql);
       
-      // Substituir todos os placeholders pelos valores correspondentes
-      finalResponse = parsedResponse.explicacao || "Resultado disponível.";
+      const supabaseUrl = Deno.env.get('SUPABASE_URL');
+      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      
+      if (!supabaseUrl || !supabaseServiceKey) {
+        throw new Error('Supabase credentials not configured');
+      }
+      
+      const supabase = createClient(supabaseUrl, supabaseServiceKey);
+      
+      const { data: queryResult, error: queryError } = await supabase.rpc('execute_readonly_query', {
+        query_text: parsedResponse.sql
+      });
+
+      console.log('Query result:', JSON.stringify(queryResult, null, 2));
+      console.log('Query error:', queryError);
+
+      if (queryError) {
+        return new Response(JSON.stringify({ 
+          response: `Erro ao executar a consulta: ${queryError.message}`,
+          sql: parsedResponse.sql
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Substituir TODOS os placeholders dinamicamente
+      let finalResponse = parsedResponse.explicacao;
       
       if (queryResult && typeof queryResult === 'object') {
-        const resultObj = queryResult as Record<string, unknown>;
-        for (const [key, rawValue] of Object.entries(resultObj)) {
+        // Iterar sobre todas as chaves do resultado
+        for (const [key, value] of Object.entries(queryResult)) {
+          const placeholder = `{{${key}}}`;
           let formattedValue: string;
-          if (typeof rawValue === 'number') {
-            formattedValue = "R$ " + rawValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-          } else if (rawValue === null || rawValue === undefined) {
-            formattedValue = "R$ 0,00";
+          
+          if (typeof value === 'number') {
+            // Formatar números como moeda brasileira
+            formattedValue = `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          } else if (value === null || value === undefined) {
+            formattedValue = 'R$ 0,00';
           } else {
-            formattedValue = String(rawValue);
+            formattedValue = String(value);
           }
-          // Substituir o placeholder correspondente ao nome da coluna
-          finalResponse = finalResponse.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), formattedValue);
+          
+          // Substituir todas as ocorrências do placeholder
+          finalResponse = finalResponse.split(placeholder).join(formattedValue);
         }
       }
+
+      console.log('Final response:', finalResponse);
+
+      return new Response(JSON.stringify({ 
+        response: finalResponse,
+        sql: parsedResponse.sql,
+        rawResult: queryResult
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
+    // Se não tem SQL, retornar a explicação diretamente
     return new Response(JSON.stringify({ 
-      response: finalResponse,
-      ai_response: parsedResponse,
-      query_result: queryData,
-      raw_response: rawContent
+      response: parsedResponse.explicacao || aiContent
     }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
-  } catch (error: unknown) {
-    console.error("Erro na função geny-chat:", error);
-    const errorMessage = error instanceof Error ? error.message : "Erro interno";
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+  } catch (error) {
+    console.error('Error in geny-chat function:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+    return new Response(JSON.stringify({ 
+      error: errorMessage,
+      response: 'Desculpe, ocorreu um erro ao processar sua mensagem. Por favor, tente novamente.'
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 });
