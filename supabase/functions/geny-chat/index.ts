@@ -192,11 +192,8 @@ serve(async (req) => {
           const placeholder = `{{${key}}}`;
           let formattedValue: string;
           
-          if (typeof value === 'number') {
-            // Formatar números como moeda brasileira
-            formattedValue = `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-          } else if (value === null || value === undefined) {
-            formattedValue = 'R$ 0,00';
+          if (value === null || value === undefined) {
+            formattedValue = '0';
           } else {
             formattedValue = String(value);
           }
