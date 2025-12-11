@@ -1,4 +1,4 @@
-import { Home, Package, ShoppingCart, Users, Settings, UserCircle, Shield, MessageCircle, Megaphone, Sparkles } from "lucide-react";
+import { Home, Package, ShoppingCart, Users, Settings, UserCircle, Shield, MessageCircle, Megaphone, Sparkles, FileBarChart } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { NavLink } from "react-router-dom";
@@ -25,6 +25,7 @@ const allItems = [
   { title: "Contato", url: "/contato", icon: MessageCircle, allowedRoles: ["vendedor"] },
   { title: "Campanha", url: "/campanha", icon: Megaphone, allowedRoles: ["admin", "gerente"] },
   { title: "Geny", url: "/geny", icon: Sparkles, allowedRoles: ["admin", "gerente"] },
+  { title: "Relatórios", url: "/relatorios", icon: FileBarChart, allowedRoles: ["admin", "gerente"] },
   { title: "Usuários", url: "/usuarios", icon: Shield, allowedRoles: ["admin"] },
   { title: "Configurações", url: "/configuracoes", icon: Settings, allowedRoles: ["admin"] },
 ];

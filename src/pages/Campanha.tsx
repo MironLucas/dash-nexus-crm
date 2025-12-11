@@ -195,6 +195,13 @@ const Campanha = () => {
       // Melhor usar queries diretas
       
       let resultados: ClienteRanking[] = [];
+      const clientesList = clientes as any[] || [];
+      
+      if (clientesList.length === 0) {
+        toast.info('Nenhum cliente cadastrado');
+        setIsLoadingRanking(false);
+        return;
+      }
       
       if (tipoRanking === 'valor') {
         const { data: ordersData, error: ordersError } = await supabase
@@ -210,22 +217,17 @@ const Campanha = () => {
           }
         });
 
-        const clientesOrdenados = Object.entries(totaisPorCliente)
-          .sort(([, a], [, b]) => b - a)
-          .slice(0, tamanhoRanking);
+        // Incluir TODOS os clientes, mesmo sem pedidos
+        resultados = clientesList.map((cliente: any) => ({
+          id_client: cliente.id_client,
+          nome_completo: cliente.nome_completo,
+          telefone: cliente.telefone,
+          total: totaisPorCliente[cliente.id_client] || 0
+        }));
 
-        for (const [idClient, total] of clientesOrdenados) {
-          const clientesList = clientes as any[] || [];
-          const cliente = clientesList.find((c: any) => c.id_client === parseInt(idClient));
-          if (cliente) {
-            resultados.push({
-              id_client: parseInt(idClient),
-              nome_completo: cliente.nome_completo,
-              telefone: cliente.telefone,
-              total: total as number
-            });
-          }
-        }
+        resultados.sort((a, b) => b.total - a.total);
+        resultados = resultados.slice(0, tamanhoRanking);
+
       } else if (tipoRanking === 'quantidade_pedidos') {
         const { data: ordersData, error: ordersError } = await supabase
           .from('orders' as any)
@@ -240,22 +242,17 @@ const Campanha = () => {
           }
         });
 
-        const clientesOrdenados = Object.entries(contagemPorCliente)
-          .sort(([, a], [, b]) => b - a)
-          .slice(0, tamanhoRanking);
+        // Incluir TODOS os clientes, mesmo sem pedidos
+        resultados = clientesList.map((cliente: any) => ({
+          id_client: cliente.id_client,
+          nome_completo: cliente.nome_completo,
+          telefone: cliente.telefone,
+          total: contagemPorCliente[cliente.id_client] || 0
+        }));
 
-        for (const [idClient, total] of clientesOrdenados) {
-          const clientesList = clientes as any[] || [];
-          const cliente = clientesList.find((c: any) => c.id_client === parseInt(idClient));
-          if (cliente) {
-            resultados.push({
-              id_client: parseInt(idClient),
-              nome_completo: cliente.nome_completo,
-              telefone: cliente.telefone,
-              total: total as number
-            });
-          }
-        }
+        resultados.sort((a, b) => b.total - a.total);
+        resultados = resultados.slice(0, tamanhoRanking);
+
       } else if (tipoRanking === 'quantidade_produtos') {
         const { data: ordersData, error: ordersError } = await supabase
           .from('orders' as any)
@@ -283,22 +280,16 @@ const Campanha = () => {
           }
         });
 
-        const clientesOrdenados = Object.entries(produtosPorCliente)
-          .sort(([, a], [, b]) => b - a)
-          .slice(0, tamanhoRanking);
+        // Incluir TODOS os clientes, mesmo sem pedidos
+        resultados = clientesList.map((cliente: any) => ({
+          id_client: cliente.id_client,
+          nome_completo: cliente.nome_completo,
+          telefone: cliente.telefone,
+          total: produtosPorCliente[cliente.id_client] || 0
+        }));
 
-        for (const [idClient, total] of clientesOrdenados) {
-          const clientesList = clientes as any[] || [];
-          const cliente = clientesList.find((c: any) => c.id_client === parseInt(idClient));
-          if (cliente) {
-            resultados.push({
-              id_client: parseInt(idClient),
-              nome_completo: cliente.nome_completo,
-              telefone: cliente.telefone,
-              total: total as number
-            });
-          }
-        }
+        resultados.sort((a, b) => b.total - a.total);
+        resultados = resultados.slice(0, tamanhoRanking);
       }
 
       setClientesRanking(resultados);
