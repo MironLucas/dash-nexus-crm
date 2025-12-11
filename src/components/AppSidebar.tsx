@@ -15,6 +15,7 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { UserProfile } from "@/components/UserProfile";
+import defaultLogo from "@/assets/logo.png";
 
 const allItems = [
   { title: "Inicial", url: "/", icon: Home, allowedRoles: ["admin", "gerente", "vendedor"] },
@@ -35,6 +36,7 @@ export function AppSidebar() {
   const isCollapsed = state === "collapsed";
   const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchUserRole = async () => {
@@ -52,7 +54,19 @@ export function AppSidebar() {
       }
     };
 
+    const fetchLogo = async () => {
+      const { data } = await supabase
+        .from('system_config')
+        .select('value')
+        .eq('key', 'company_logo')
+        .maybeSingle();
+      if (data?.value) {
+        setLogoUrl(data.value);
+      }
+    };
+
     fetchUserRole();
+    fetchLogo();
   }, []);
 
   const items = userRole ? allItems.filter(item => item.allowedRoles.includes(userRole)) : [];
@@ -61,9 +75,12 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-primary-foreground px-4 py-6">
-            {!isCollapsed && <span className="text-xl font-bold">CRM Pro</span>}
-            {isCollapsed && <span className="text-xl font-bold">C</span>}
+          <SidebarGroupLabel className="px-4 py-6 flex justify-center">
+            <img 
+              src={logoUrl || defaultLogo} 
+              alt="Logo" 
+              className={isCollapsed ? "h-8 w-8 object-contain" : "h-12 object-contain"}
+            />
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
