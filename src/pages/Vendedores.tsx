@@ -5,10 +5,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { DollarSign, ShoppingCart, TrendingUp, Search, Link as LinkIcon, Calendar } from "lucide-react";
+import { DollarSign, ShoppingCart, TrendingUp, Search, Link as LinkIcon, Plus } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { format, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 const Vendedores = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -16,6 +18,8 @@ const Vendedores = () => {
   const [periodoFilter, setPeriodoFilter] = useState<string>("all");
   const queryClient = useQueryClient();
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [novoVendedorNome, setNovoVendedorNome] = useState("");
 
   useEffect(() => {
     const fetchRole = async () => {
@@ -133,6 +137,45 @@ const Vendedores = () => {
     }
   });
 
+  // Mutation para criar novo vendedor
+  const createVendedorMutation = useMutation({
+    mutationFn: async (nomevendedor: string) => {
+      // Buscar o maior ID existente para gerar o próximo
+      const { data: maxData } = await supabase
+        .from('vendedores' as any)
+        .select('vendedor')
+        .order('vendedor', { ascending: false })
+        .limit(1);
+      
+      const nextId = maxData && maxData.length > 0 ? (maxData[0] as any).vendedor + 1 : 1;
+      
+      const { error } = await supabase
+        .from('vendedores' as any)
+        .insert({ vendedor: nextId, nomevendedor: nomevendedor });
+      
+      if (error) throw error;
+      return nextId;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vendedores'] });
+      toast.success('Vendedor criado com sucesso!');
+      setNovoVendedorNome("");
+      setIsDialogOpen(false);
+    },
+    onError: (error) => {
+      console.error('Erro ao criar vendedor:', error);
+      toast.error('Erro ao criar vendedor');
+    }
+  });
+
+  const handleCreateVendedor = () => {
+    if (!novoVendedorNome.trim()) {
+      toast.error('Digite o nome do vendedor');
+      return;
+    }
+    createVendedorMutation.mutate(novoVendedorNome.trim());
+  };
+
   const { data: salesByVendedor } = useQuery({
     queryKey: ['sales-by-vendedor', periodoFilter],
     queryFn: async () => {
@@ -215,9 +258,42 @@ const Vendedores = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Vendedores</h1>
-        <p className="text-muted-foreground">Performance e métricas da equipe de vendas</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Vendedores</h1>
+          <p className="text-muted-foreground">Performance e métricas da equipe de vendas</p>
+        </div>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Adicionar Vendedor
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Adicionar Novo Vendedor</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="nomevendedor">Nome do Vendedor</Label>
+                <Input
+                  id="nomevendedor"
+                  placeholder="Digite o nome do vendedor"
+                  value={novoVendedorNome}
+                  onChange={(e) => setNovoVendedorNome(e.target.value)}
+                />
+              </div>
+              <Button 
+                onClick={handleCreateVendedor} 
+                className="w-full"
+                disabled={createVendedorMutation.isPending}
+              >
+                {createVendedorMutation.isPending ? 'Criando...' : 'Criar Vendedor'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
