@@ -186,20 +186,44 @@ serve(async (req) => {
       // Substituir TODOS os placeholders dinamicamente
       let finalResponse = parsedResponse.explicacao;
       
-      if (queryResult && typeof queryResult === 'object') {
-        // Iterar sobre todas as chaves do resultado
-        for (const [key, value] of Object.entries(queryResult)) {
-          const placeholder = `{{${key}}}`;
-          let formattedValue: string;
+      if (queryResult) {
+        // Se é um array com múltiplos resultados
+        if (Array.isArray(queryResult) && queryResult.length > 0) {
+          // Para cada placeholder encontrado, extrair o valor correspondente de todos os registros
+          const placeholderRegex = /\{\{(\w+)\}\}/g;
+          const placeholders = [...finalResponse.matchAll(placeholderRegex)];
           
-          if (value === null || value === undefined) {
-            formattedValue = '0';
-          } else {
-            formattedValue = String(value);
+          for (const match of placeholders) {
+            const placeholder = match[0]; // {{nomevendedor}}
+            const key = match[1]; // nomevendedor
+            
+            // Coletar todos os valores dessa coluna de todos os registros
+            const values = queryResult
+              .map((row: any) => row[key])
+              .filter((v: any) => v !== null && v !== undefined)
+              .map((v: any) => String(v));
+            
+            // Juntar os valores com vírgula ou usar formato adequado
+            const formattedValue = values.length > 0 ? values.join(', ') : '0';
+            
+            // Substituir todas as ocorrências do placeholder
+            finalResponse = finalResponse.split(placeholder).join(formattedValue);
           }
-          
-          // Substituir todas as ocorrências do placeholder
-          finalResponse = finalResponse.split(placeholder).join(formattedValue);
+        } 
+        // Se é um objeto único
+        else if (typeof queryResult === 'object' && !Array.isArray(queryResult)) {
+          for (const [key, value] of Object.entries(queryResult)) {
+            const placeholder = `{{${key}}}`;
+            let formattedValue: string;
+            
+            if (value === null || value === undefined) {
+              formattedValue = '0';
+            } else {
+              formattedValue = String(value);
+            }
+            
+            finalResponse = finalResponse.split(placeholder).join(formattedValue);
+          }
         }
       }
 
