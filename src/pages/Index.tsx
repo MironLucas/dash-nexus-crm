@@ -1,11 +1,12 @@
 import { DashboardCard } from "@/components/DashboardCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DollarSign, ShoppingCart, Users, TrendingUp, Eye, MousePointer, ShoppingBag } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, subMonths, startOfMonth, endOfMonth, startOfDay, subDays } from "date-fns";
+import { format, subMonths, startOfMonth, endOfMonth, startOfDay, subDays, getDaysInMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AreaChart,
@@ -21,6 +22,8 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
+  LineChart,
+  Line,
 } from "recharts";
 
 const COLORS = [
@@ -31,8 +34,29 @@ const COLORS = [
   "hsl(var(--chart-5))",
 ];
 
+const MONTHS = [
+  { value: "1", label: "Janeiro" },
+  { value: "2", label: "Fevereiro" },
+  { value: "3", label: "Março" },
+  { value: "4", label: "Abril" },
+  { value: "5", label: "Maio" },
+  { value: "6", label: "Junho" },
+  { value: "7", label: "Julho" },
+  { value: "8", label: "Agosto" },
+  { value: "9", label: "Setembro" },
+  { value: "10", label: "Outubro" },
+  { value: "11", label: "Novembro" },
+  { value: "12", label: "Dezembro" },
+];
+
 const Index = () => {
   const navigate = useNavigate();
+  const currentDate = new Date();
+  const [selectedMonth, setSelectedMonth] = useState((currentDate.getMonth() + 1).toString());
+  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear().toString());
+
+  // Generate years from 2020 to current year + 1
+  const years = Array.from({ length: currentDate.getFullYear() - 2019 + 1 }, (_, i) => (2020 + i).toString());
 
   // Check authentication
   useEffect(() => {
@@ -125,6 +149,31 @@ const Index = () => {
     };
   });
 
+  // Daily sales data for selected month/year
+  const dailySalesData = (() => {
+    const month = parseInt(selectedMonth);
+    const year = parseInt(selectedYear);
+    const daysInMonth = getDaysInMonth(new Date(year, month - 1));
+    
+    return Array.from({ length: daysInMonth }, (_, i) => {
+      const day = i + 1;
+      const dayStart = new Date(year, month - 1, day, 0, 0, 0);
+      const dayEnd = new Date(year, month - 1, day, 23, 59, 59);
+      
+      const dayOrders = orders?.filter(order => {
+        const orderDate = new Date(order.data_pedido);
+        return orderDate >= dayStart && orderDate <= dayEnd;
+      }) || [];
+      
+      const daySales = dayOrders.reduce((sum, order) => sum + (Number(order.valor_final) || 0), 0);
+      
+      return {
+        dia: day.toString(),
+        vendas: daySales
+      };
+    });
+  })();
+
   // Dados de vendas por categoria
   const categoryData = products?.reduce((acc, product) => {
     const category = product.categoria || 'Outros';
@@ -213,6 +262,72 @@ const Index = () => {
               </CardContent>
             </Card>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Daily Sales Chart */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <CardTitle>Vendas Diárias</CardTitle>
+            <div className="flex gap-2">
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Mês" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map((month) => (
+                    <SelectItem key={month.value} value={month.value}>
+                      {month.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger className="w-[100px]">
+                  <SelectValue placeholder="Ano" />
+                </SelectTrigger>
+                <SelectContent>
+                  {years.map((year) => (
+                    <SelectItem key={year} value={year}>
+                      {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={dailySalesData}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis 
+                dataKey="dia" 
+                className="text-sm" 
+                tick={{ fontSize: 10 }}
+                interval={1}
+              />
+              <YAxis className="text-sm" />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "hsl(var(--card))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: "var(--radius)",
+                }}
+                formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Vendas']}
+                labelFormatter={(label) => `Dia ${label}`}
+              />
+              <Line
+                type="monotone"
+                dataKey="vendas"
+                stroke="hsl(var(--chart-2))"
+                strokeWidth={2}
+                dot={{ fill: "hsl(var(--chart-2))", strokeWidth: 2, r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </CardContent>
       </Card>
 
