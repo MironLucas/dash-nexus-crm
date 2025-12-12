@@ -109,8 +109,12 @@ const handler = async (req: Request): Promise<Response> => {
       }
 
     } else {
-      // Criar novo usuário com convite
-      const { data: newUserData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+      // Criar novo usuário - primeiro tenta invite, se falhar usa createUser
+      let newUserData;
+      let inviteError;
+      
+      // Tentar inviteUserByEmail primeiro
+      const inviteResult = await supabaseAdmin.auth.admin.inviteUserByEmail(
         email,
         {
           data: {
@@ -120,8 +124,55 @@ const handler = async (req: Request): Promise<Response> => {
           redirectTo: redirectUrl
         }
       );
+      
+      inviteError = inviteResult.error;
+      newUserData = inviteResult.data;
 
-      if (inviteError) {
+      // Se falhar com email_address_invalid, tentar criar usuário manualmente
+      if (inviteError && inviteError.code === 'email_address_invalid') {
+        console.info("inviteUserByEmail falhou, tentando createUser como fallback");
+        
+        // Gerar senha temporária aleatória
+        const tempPassword = crypto.randomUUID() + crypto.randomUUID();
+        
+        const { data: createdUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+          email: email,
+          password: tempPassword,
+          email_confirm: false,
+          user_metadata: {
+            nome: nome,
+            cargo: cargo
+          }
+        });
+        
+        if (createError) {
+          console.error("Erro ao criar usuário com createUser:", createError);
+          throw createError;
+        }
+        
+        newUserData = createdUser;
+        
+        // Gerar link de convite para o usuário recém-criado
+        const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+          type: 'invite',
+          email: email,
+          options: {
+            redirectTo: redirectUrl,
+            data: {
+              nome: nome,
+              cargo: cargo
+            }
+          }
+        });
+        
+        if (linkError) {
+          console.warn("Erro ao gerar link de convite para usuário criado:", linkError);
+          // Continuar mesmo sem link - usuário pode usar "esqueci minha senha"
+        } else {
+          emailActionLink = linkData?.properties?.action_link || null;
+        }
+        
+      } else if (inviteError) {
         console.error("Erro ao criar convite:", inviteError);
         throw inviteError;
       }
@@ -129,15 +180,18 @@ const handler = async (req: Request): Promise<Response> => {
       userData = newUserData;
       
       // Inserir role do novo usuário
-      const { error: roleError } = await supabaseAdmin
-        .from('user_roles')
-        .insert({
-          user_id: newUserData.user?.id,
-          role: cargo
-        });
+      const userId = newUserData?.user?.id;
+      if (userId) {
+        const { error: roleError } = await supabaseAdmin
+          .from('user_roles')
+          .insert({
+            user_id: userId,
+            role: cargo
+          });
 
-      if (roleError) {
-        console.error("Erro ao inserir role:", roleError);
+        if (roleError) {
+          console.error("Erro ao inserir role:", roleError);
+        }
       }
     }
 
